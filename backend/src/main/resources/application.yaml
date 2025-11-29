@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: backend
+  servlet:
+    multipart:
+      max-file-size: ${SPRING_MULTIPART_MAX_FILE_SIZE:50MB}
+      max-request-size: ${SPRING_MULTIPART_MAX_REQUEST_SIZE:60MB}
+  datasource:
+    url: jdbc:mysql://localhost:3306/backend?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: false
+
+security:
+  jwt:
+    secret: c3ByaW5nLWJvb3Qtc2VjcmV0LXNwcmluZy1ib290LXNlY3JldA==
+    expiration-ms: 3600000
+    issuer: itss_nihongo_backend
+
+logging:
+  level:
+    root: INFO
+    com.itss_nihongo.backend: DEBUG
+    org.springframework.web.servlet.handler.AbstractHandlerMethodMapping: DEBUG
+
+gcp:
+  project-id: ${GCP_PROJECT_ID:speech-processing-prod}
+  credentials-path: ${GCP_SERVICE_ACCOUNT_KEY:classpath:speech-processing-prod-9ffbefa55e2c.json}
+  storage:
+    bucket: ${GCS_BUCKET_NAME:speech-processing-intermediate}
+    region: ${GCS_REGION:asia-southeast1}
+    lifecycle-days: ${GCS_LIFECYCLE_DAYS:7}
+    slides-folder: ${GCP_STORAGE_SLIDES_FOLDER:slides}
+
+slide-processing:
+  base-url: ${SLIDE_SERVICE_BASE_URL:http://localhost:8010}
+  timeout-ms: ${SLIDE_SERVICE_TIMEOUT_MS:15000}
