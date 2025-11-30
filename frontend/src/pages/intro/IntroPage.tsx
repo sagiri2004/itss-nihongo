@@ -1,41 +1,43 @@
 import { Link } from 'react-router-dom'
+import { useLanguage } from '../../context/LanguageContext'
 
-const IntroPage = () => (
-  <section className="marketing-hero">
-    <div>
-      <p className="eyebrow">Khởi động nhanh</p>
-      <h1>Giải pháp theo dõi tiến độ tự học tiếng Nhật cho ITSS.</h1>
-      <p>
-        Toàn bộ dữ liệu bài giảng, slide deck và lịch sử thu âm được gom về một bảng điều khiển duy nhất. Kết nối
-        Backend Spring Boot, quan sát chỉ số và hợp tác cùng đội phát triển nội bộ.
-      </p>
-      <div className="hero-actions">
-        <Link className="primary-btn" to="/login">
-          Truy cập ngay
-        </Link>
-        <Link className="text-btn" to="/register">
-          Tạo tài khoản
-        </Link>
+const IntroPage = () => {
+  const { t } = useLanguage()
+
+  return (
+    <section className="marketing-hero">
+      <div>
+        <p className="eyebrow">{t('intro.eyebrow')}</p>
+        <h1>{t('intro.title')}</h1>
+        <p>{t('intro.description')}</p>
+        <div className="hero-actions">
+          <Link className="primary-btn" to="/login">
+            {t('intro.accessNow')}
+          </Link>
+          <Link className="text-btn" to="/register">
+            {t('intro.createAccount')}
+          </Link>
+        </div>
       </div>
-    </div>
-    <div className="highlight-panel">
-      <ul>
-        <li>
-          <strong>Giáo trình đồng bộ</strong>
-          <span>Kết nối các asset bài giảng, slide và audio.</span>
-        </li>
-        <li>
-          <strong>Giám sát thời gian thực</strong>
-          <span>Dashboard mẫu sẵn sàng nhận dữ liệu thật.</span>
-        </li>
-        <li>
-          <strong>Hệ thống phân quyền</strong>
-          <span>JWT + Spring Security đảm bảo an toàn truy cập.</span>
-        </li>
-      </ul>
-    </div>
-  </section>
-)
+      <div className="highlight-panel">
+        <ul>
+          <li>
+            <strong>{t('intro.features.sync.title')}</strong>
+            <span>{t('intro.features.sync.description')}</span>
+          </li>
+          <li>
+            <strong>{t('intro.features.monitoring.title')}</strong>
+            <span>{t('intro.features.monitoring.description')}</span>
+          </li>
+          <li>
+            <strong>{t('intro.features.security.title')}</strong>
+            <span>{t('intro.features.security.description')}</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+  )
+}
 
 export default IntroPage
 

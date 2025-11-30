@@ -225,6 +225,32 @@ export const translations: TranslationRoot = {
         presentation: 'プレゼンテーション: {id}',
       },
     },
+    intro: {
+      eyebrow: 'クイックスタート',
+      title: 'ITSS向け日本語自習進捗追跡ソリューション',
+      description:
+        'すべての講義データ、スライドデッキ、録音履歴を1つのダッシュボードに集約。Spring Bootバックエンドに接続し、メトリクスを観察し、内部開発チームと協力します。',
+      accessNow: '今すぐアクセス',
+      createAccount: 'アカウント作成',
+      features: {
+        sync: {
+          title: '同期カリキュラム',
+          description: '講義アセット、スライド、オーディオを接続。',
+        },
+        monitoring: {
+          title: 'リアルタイム監視',
+          description: '実際のデータを受信する準備ができたサンプルダッシュボード。',
+        },
+        security: {
+          title: '認証システム',
+          description: 'JWT + Spring Securityが安全なアクセスを保証。',
+        },
+      },
+      nav: {
+        login: 'ログイン',
+        register: 'アカウント作成',
+      },
+    },
   },
   vi: {
     common: {
@@ -440,6 +466,32 @@ export const translations: TranslationRoot = {
       session: {
         label: 'Phiên:',
         presentation: 'Bản trình bày: {id}',
+      },
+    },
+    intro: {
+      eyebrow: 'Khởi động nhanh',
+      title: 'Giải pháp theo dõi tiến độ tự học tiếng Nhật cho ITSS.',
+      description:
+        'Toàn bộ dữ liệu bài giảng, slide deck và lịch sử thu âm được gom về một bảng điều khiển duy nhất. Kết nối Backend Spring Boot, quan sát chỉ số và hợp tác cùng đội phát triển nội bộ.',
+      accessNow: 'Truy cập ngay',
+      createAccount: 'Tạo tài khoản',
+      features: {
+        sync: {
+          title: 'Giáo trình đồng bộ',
+          description: 'Kết nối các asset bài giảng, slide và audio.',
+        },
+        monitoring: {
+          title: 'Giám sát thời gian thực',
+          description: 'Dashboard mẫu sẵn sàng nhận dữ liệu thật.',
+        },
+        security: {
+          title: 'Hệ thống phân quyền',
+          description: 'JWT + Spring Security đảm bảo an toàn truy cập.',
+        },
+      },
+      nav: {
+        login: 'Đăng nhập',
+        register: 'Tạo tài khoản',
       },
     },
   },
