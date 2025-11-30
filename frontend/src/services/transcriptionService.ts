@@ -177,7 +177,8 @@ export const createTranscriptionClient = ({
           .catch((error) => console.error('Failed to read blob audio chunk', error))
       } else if (ArrayBuffer.isView(chunk)) {
         const view = chunk as ArrayBufferView
-        enqueueBinary(view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength))
+        const buffer = view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength)
+        enqueueBinary(buffer as ArrayBuffer)
       } else {
         enqueueBinary(chunk)
       }

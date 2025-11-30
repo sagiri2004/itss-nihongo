@@ -29,7 +29,7 @@ const CHUNK_SIZE = 3200
 const CHUNK_INTERVAL_MS = 100
 
 const RealtimeTranscriptionPage = () => {
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
   const [lectureIdInput, setLectureIdInput] = useState<string>('')
   const [mode, setMode] = useState<Mode>('microphone')
   const [isRecording, setIsRecording] = useState(false)
@@ -404,22 +404,28 @@ const RealtimeTranscriptionPage = () => {
   const handleSocketEvent = (payload: TranscriptionEventMessage) => {
     switch (payload.event) {
       case 'session_started':
-        setSessionId(payload.session_id)
-        setPresentationId(payload.presentation_id)
-        setStatusState({
-          key: 'transcription.status.sessionStarted',
-          params: { sessionId: payload.session_id },
-        })
+        if ('session_id' in payload && typeof payload.session_id === 'string') {
+          setSessionId(payload.session_id)
+          setStatusState({
+            key: 'transcription.status.sessionStarted',
+            params: { sessionId: payload.session_id },
+          })
+        }
+        if ('presentation_id' in payload && typeof payload.presentation_id === 'string') {
+          setPresentationId(payload.presentation_id)
+        }
         if (mode === 'file' && shouldStreamFileRef.current && fileStreamRef.current) {
           setStatusState({ key: 'transcription.status.sessionReadyForFile' })
           beginStreamingFile()
         }
         break
       case 'session_closed':
-        setStatusState({
-          key: 'transcription.status.sessionClosed',
-          params: { sessionId: payload.session_id },
-        })
+        if ('session_id' in payload && typeof payload.session_id === 'string') {
+          setStatusState({
+            key: 'transcription.status.sessionClosed',
+            params: { sessionId: payload.session_id },
+          })
+        }
         setSessionId(null)
         setPresentationId(null)
         clearFileStreaming()
@@ -431,17 +437,21 @@ const RealtimeTranscriptionPage = () => {
         setIsRecording(false)
         break
       case 'transcription': {
-        const result = payload.result
-        if (result.is_final) {
-          appendMessage(result.text, result.confidence)
-          setInterimText('')
-        } else {
-          setInterimText(result.text)
+        if ('result' in payload && payload.result && typeof payload.result === 'object') {
+          const result = payload.result as { is_final?: boolean; text?: string; confidence?: number }
+          if (result.is_final && typeof result.text === 'string' && typeof result.confidence === 'number') {
+            appendMessage(result.text, result.confidence)
+            setInterimText('')
+          } else if (typeof result.text === 'string') {
+            setInterimText(result.text)
+          }
         }
         break
       }
       case 'error':
-        setErrorState({ message: payload.message })
+        if ('message' in payload && typeof payload.message === 'string') {
+          setErrorState({ message: payload.message })
+        }
         clearFileStreaming()
         if (mode === 'microphone') {
           pendingMicSamplesRef.current = []
