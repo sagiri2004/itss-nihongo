@@ -6,8 +6,9 @@ import { dashboardStore } from '../store/dashboardStore'
 export function useDashboardData() {
   const data = useSyncExternalStore(dashboardStore.subscribe, dashboardStore.getState)
 
-  const refresh = useCallback(async () => {
-    const latest = await dashboardService.fetchDashboard()
+  const refresh = useCallback(async (token?: string | null) => {
+    if (!token) return
+    const latest = await dashboardService.fetchDashboard(token)
     dashboardStore.setState(latest)
   }, [])
 

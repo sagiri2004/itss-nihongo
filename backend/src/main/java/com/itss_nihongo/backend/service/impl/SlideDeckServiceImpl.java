@@ -4,6 +4,7 @@ import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageException;
+import com.itss_nihongo.backend.client.slide.SlideInfoPayload;
 import com.itss_nihongo.backend.client.slide.SlideProcessingClient;
 import com.itss_nihongo.backend.client.slide.SlideProcessingResponsePayload;
 import com.itss_nihongo.backend.config.GcpStorageProperties;
@@ -11,6 +12,7 @@ import com.itss_nihongo.backend.dto.response.SlideDeckResponse;
 import com.itss_nihongo.backend.entity.AssetStatus;
 import com.itss_nihongo.backend.entity.LectureEntity;
 import com.itss_nihongo.backend.entity.SlideDeckEntity;
+import com.itss_nihongo.backend.entity.SlidePageEntity;
 import com.itss_nihongo.backend.exception.AppException;
 import com.itss_nihongo.backend.exception.ErrorCode;
 import com.itss_nihongo.backend.repository.LectureRepository;
@@ -19,6 +21,10 @@ import com.itss_nihongo.backend.service.SlideDeckService;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,6 +93,7 @@ public class SlideDeckServiceImpl implements SlideDeckService {
                 .lectureId(entity.getLecture().getId())
                 .gcpAssetId(entity.getGcpAssetId())
                 .originalName(entity.getOriginalName())
+                .pageCount(entity.getPageCount())
                 .uploadStatus(entity.getUploadStatus())
                 .createdAt(entity.getCreatedAt())
                 .build();
@@ -132,6 +139,11 @@ public class SlideDeckServiceImpl implements SlideDeckService {
             return;
         }
 
+        if (!slideProcessingClient.isConfigured()) {
+            log.warn("Slide processing service base URL is not configured. Skipping processing.");
+            return;
+        }
+
         String objectKey = slideDeck.getGcpAssetId();
         if (!StringUtils.hasText(objectKey)) {
             log.warn("Slide deck {} has no GCS object key", slideDeck.getId());
@@ -139,19 +151,101 @@ public class SlideDeckServiceImpl implements SlideDeckService {
         }
 
         String gcsUri = "gs://%s/%s".formatted(bucket, objectKey);
-        slideProcessingClient.processSlides(lecture.getId(), gcsUri, slideDeck.getOriginalName())
-                .ifPresent(response -> updateSlideDeckWithProcessingResult(slideDeck, response));
+        slideDeck.setUploadStatus(AssetStatus.PROCESSING);
+        slideDeckRepository.save(slideDeck);
+
+        Optional<SlideProcessingResponsePayload> response =
+                slideProcessingClient.processSlides(lecture.getId(), gcsUri, slideDeck.getOriginalName());
+
+        if (response.isPresent()) {
+            updateSlideDeckWithProcessingResult(slideDeck, response.get());
+        } else {
+            handleSlideProcessingFailure(slideDeck);
+        }
     }
 
     private void updateSlideDeckWithProcessingResult(SlideDeckEntity slideDeck,
                                                      SlideProcessingResponsePayload response) {
-        slideDeck.setPageCount(response.slideCount());
-        slideDeck.setContentSummary("Processed %d slides, %d keywords".formatted(
-                response.slideCount(),
-                response.keywordsCount()
-        ));
+        slideDeck.setPageCount(Math.max(response.slideCount(), safeSize(response.slides())));
+        slideDeck.setContentSummary(buildDeckSummary(response));
         slideDeck.setUploadStatus(AssetStatus.READY);
+
+        if (StringUtils.hasText(response.originalName())) {
+            slideDeck.setOriginalName(response.originalName());
+        }
+
+        slideDeck.getPages().clear();
+        if (response.slides() != null) {
+            for (SlideInfoPayload slideInfo : response.slides()) {
+                SlidePageEntity page = new SlidePageEntity();
+                page.setSlideDeck(slideDeck);
+                page.setPageNumber(slideInfo.slideId());
+                page.setTitle(slideInfo.title());
+                page.setContentSummary(buildSlideSummary(slideInfo));
+                page.setAllText(slideInfo.allText());
+                page.setHeadings(new ArrayList<>(copyToList(slideInfo.headings())));
+                page.setBullets(new ArrayList<>(copyToList(slideInfo.bullets())));
+                page.setBody(new ArrayList<>(copyToList(slideInfo.body())));
+                page.setKeywords(new ArrayList<>(copyToList(slideInfo.keywords())));
+                slideDeck.getPages().add(page);
+            }
+        }
+
         slideDeckRepository.save(slideDeck);
+        log.info("Slide deck {} processed successfully with {} pages", slideDeck.getId(), slideDeck.getPageCount());
+    }
+
+    private void handleSlideProcessingFailure(SlideDeckEntity slideDeck) {
+        slideDeck.setUploadStatus(AssetStatus.FAILED);
+        slideDeckRepository.save(slideDeck);
+        log.error("Slide processing failed for slide deck {}", slideDeck.getId());
+    }
+
+    private String buildDeckSummary(SlideProcessingResponsePayload response) {
+        return "Processed %d slides with %d keywords (embeddings: %s)".formatted(
+                response.slideCount(),
+                response.keywordsCount(),
+                response.hasEmbeddings() ? "enabled" : "disabled"
+        );
+    }
+
+    private String buildSlideSummary(SlideInfoPayload slideInfo) {
+        String allText = slideInfo.allText();
+        if (StringUtils.hasText(allText)) {
+            return truncate(allText.trim(), 2000);
+        }
+
+        if (StringUtils.hasText(slideInfo.title())) {
+            return slideInfo.title();
+        }
+
+        List<String> bullets = copyToList(slideInfo.bullets());
+        if (!bullets.isEmpty()) {
+            return truncate(String.join("; ", bullets), 2000);
+        }
+
+        return "Slide %d".formatted(slideInfo.slideId());
+    }
+
+    private List<String> copyToList(List<String> source) {
+        if (source == null) {
+            return List.of();
+        }
+        return source.stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .toList();
+    }
+
+    private int safeSize(Collection<?> collection) {
+        return collection == null ? 0 : collection.size();
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (!StringUtils.hasText(value) || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 }
 

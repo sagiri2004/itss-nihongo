@@ -5,6 +5,7 @@ export type SlideDeck = {
   lectureId: number
   gcpAssetId: string
   originalName?: string | null
+  pageCount?: number | null
   uploadStatus: AssetStatus
   createdAt: string
 }

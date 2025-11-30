@@ -58,4 +58,23 @@ export const httpClient = async <T>(path: string, options: RequestOptions = {}):
   }
 }
 
+export const httpClientBlob = async (path: string, options: RequestOptions = {}): Promise<Blob> => {
+  const { token, headers, method, ...rest } = options
+
+  const response = await fetch(buildUrl(path), {
+    method: method ?? 'GET',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    },
+    ...rest,
+  })
+
+  if (!response.ok) {
+    await parseError(response)
+  }
+
+  return await response.blob()
+}
+
 

@@ -42,6 +42,7 @@ public class SecurityConfig {
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/transcriptions").permitAll()
                 .anyRequest().authenticated()
         );
         http.exceptionHandling(ex -> ex

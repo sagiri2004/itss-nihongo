@@ -1,16 +1,24 @@
+import { useMemo } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import LanguageSwitcher from '../components/LanguageSwitcher'
+import { useLanguage } from '../context/LanguageContext'
 import { useAuth } from '../hooks/useAuth'
 import { classNames } from '../utils/classNames'
-
-const navItems = [
-  { label: 'Tổng quan', to: '/app/dashboard' },
-  { label: 'Tạo lecture', to: '/app/lectures/new' },
-  { label: 'Upload slide', to: '/app/slides/upload' },
-]
 
 const MainLayout = () => {
   const navigate = useNavigate()
   const { logout, user } = useAuth()
+  const { t } = useLanguage()
+
+  const navItems = useMemo(
+    () => [
+      { label: t('nav.home'), to: '/app/dashboard' },
+      { label: t('nav.createSession'), to: '/app/lectures/new' },
+      { label: t('nav.manageSlides'), to: '/app/slides/upload' },
+      { label: t('nav.transcription'), to: '/app/transcription' },
+    ],
+    [t],
+  )
 
   const handleLogout = () => {
     logout()
@@ -18,48 +26,44 @@ const MainLayout = () => {
   }
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <div>
-          <p className="eyebrow">ITSS Nihongo</p>
-          <h1>Không gian quản trị</h1>
-          {user && (
-            <p className="subtitle header-greeting">
-              Xin chào, <strong>{user.username}</strong>! Chúc bạn một ngày làm việc hiệu quả.
-            </p>
-          )}
+    <div className="app-shell-modern">
+      <header className="topbar">
+        <div className="topbar__brand">
+          <span className="icon-button" aria-hidden="true">
+            ロゴ
+          </span>
+          <span>{t('common.brand')}</span>
         </div>
-        <div className="header-actions">
-          {user && (
-            <div className="user-chip">
-              <span className="user-name">{user.username}</span>
-              <span className="user-role">{user.roles?.join(', ') || 'User'}</span>
-            </div>
-          )}
-          <button type="button" className="text-btn" onClick={handleLogout}>
-            Đăng xuất
+        <nav className="topbar__nav">
+          {navItems.map((item) => (
+            <NavLink key={item.to} to={item.to} className={({ isActive }) => classNames(isActive && 'active')}>
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="topbar__actions">
+          <LanguageSwitcher />
+          <span className="icon-button" aria-hidden="true">
+            🔔
+          </span>
+          <span className="icon-button" aria-hidden="true">
+            📩
+          </span>
+          {user && <div className="user-pill">{user.username}</div>}
+          <button type="button" className="secondary-button" onClick={handleLogout}>
+            {t('common.logout')}
           </button>
         </div>
       </header>
 
-      <div className="app-body">
-        <aside className="app-sidebar">
-          <nav>
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) => classNames('sidebar-link', isActive && 'active')}
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
-        </aside>
-
-        <main className="app-main">
+      <div className="main-content">
+        <div className="page-container">
           <Outlet />
-        </main>
+          <div className="page-footer-links">
+            <a href="#faq">{t('common.faq')}</a>
+            <a href="#privacy">{t('common.privacy')}</a>
+          </div>
+        </div>
       </div>
     </div>
   )

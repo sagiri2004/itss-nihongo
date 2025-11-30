@@ -1,0 +1,14 @@
+.env
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+yeuem_accessKeys.csv
+database.json
+transcript_*.txt
+downloads/
+speech-processing-prod-9ffbefa55e2c.json
+docs/
+.pytest_cache/
+.vscode/
+.ipynb_checkpoints/

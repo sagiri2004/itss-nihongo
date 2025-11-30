@@ -1,7 +1,9 @@
 package com.itss_nihongo.backend.entity;
 
+import com.itss_nihongo.backend.common.converter.StringListJsonConverter;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -54,6 +56,29 @@ public class SlidePageEntity {
 
     @Column(name = "content_summary", columnDefinition = "TEXT", nullable = false)
     private String contentSummary;
+
+    @Column(name = "all_text", columnDefinition = "LONGTEXT")
+    private String allText;
+
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(name = "headings", columnDefinition = "LONGTEXT")
+    @Builder.Default
+    private List<String> headings = new ArrayList<>();
+
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(name = "bullets", columnDefinition = "LONGTEXT")
+    @Builder.Default
+    private List<String> bullets = new ArrayList<>();
+
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(name = "body_text", columnDefinition = "LONGTEXT")
+    @Builder.Default
+    private List<String> body = new ArrayList<>();
+
+    @Convert(converter = StringListJsonConverter.class)
+    @Column(name = "keywords", columnDefinition = "LONGTEXT")
+    @Builder.Default
+    private List<String> keywords = new ArrayList<>();
 
     @Column(name = "preview_url", length = 512)
     private String previewUrl;

@@ -9,8 +9,11 @@ import RegisterPage from './pages/auth/RegisterPage'
 import IntroPage from './pages/intro/IntroPage'
 import SlideUploadPage from './pages/slides/SlideUploadPage'
 import LectureCreatePage from './pages/lectures/LectureCreatePage'
+import LectureDetailPage from './pages/lectures/LectureDetailPage'
+import RealtimeTranscriptionPage from './pages/transcription/RealtimeTranscriptionPage'
 import './styles/layouts.css'
 import './styles/dashboard.css'
+import './styles/new-ui.css'
 
 function App() {
   return (
@@ -34,7 +37,9 @@ function App() {
             </Route>
             <Route path="lectures">
               <Route path="new" element={<LectureCreatePage />} />
+              <Route path=":lectureId" element={<LectureDetailPage />} />
             </Route>
+            <Route path="transcription" element={<RealtimeTranscriptionPage />} />
           </Route>
         </Route>
 

@@ -11,19 +11,19 @@
   text-transform: uppercase;
   letter-spacing: 0.25em;
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .page-header h1 {
   margin: 0.4rem 0;
   font-size: 2.6rem;
-  color: #f8fafc;
+  color: #0f172a;
 }
 
 .subtitle {
   margin: 0;
   max-width: 540px;
-  color: #cbd5f5;
+  color: #475569;
   font-size: 0.95rem;
 }
 

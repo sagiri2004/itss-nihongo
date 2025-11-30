@@ -26,10 +26,14 @@ public class SlideProcessingClient {
         this.properties = properties;
     }
 
+    public boolean isConfigured() {
+        return properties.getBaseUrl() != null && !properties.getBaseUrl().isBlank();
+    }
+
     public Optional<SlideProcessingResponsePayload> processSlides(Long lectureId,
                                                                   String gcsUri,
                                                                   String originalName) {
-        if (properties.getBaseUrl() == null || properties.getBaseUrl().isBlank()) {
+        if (!isConfigured()) {
             log.warn("Slide processing base URL is not configured. Skipping processing.");
             return Optional.empty();
         }
@@ -39,9 +43,10 @@ public class SlideProcessingClient {
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<SlideProcessingRequestPayload> entity = new HttpEntity<>(payload, headers);
 
-        String endpoint = properties.getBaseUrl().endsWith("/")
-                ? properties.getBaseUrl() + "slides/process"
-                : properties.getBaseUrl() + "/slides/process";
+        String baseUrl = properties.getBaseUrl().endsWith("/")
+                ? properties.getBaseUrl()
+                : properties.getBaseUrl() + "/";
+        String endpoint = baseUrl + "slides/process";
 
         try {
             ResponseEntity<SlideProcessingResponsePayload> response =
@@ -53,5 +58,4 @@ public class SlideProcessingClient {
         }
     }
 }
-
 

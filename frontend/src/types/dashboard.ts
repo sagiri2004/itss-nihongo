@@ -1,33 +1,9 @@
-export type Metric = {
-  label: string
-  value: string
-  trend: string
-}
+import type { LectureSummary } from './lecture'
 
-export type Alert = {
-  id: string
-  summary: string
-  timestamp: string
-  severity: 'high' | 'medium' | 'low'
-}
-
-export type TaskItem = {
-  id: string
-  title: string
-  owner: string
-  status: 'Queued' | 'In progress' | 'Blocked' | 'Done'
-}
-
-export type ActivityItem = {
-  id: number
-  description: string
-  time: string
-}
-
-export type DashboardData = {
-  metrics: Metric[]
-  alerts: Alert[]
-  tasks: TaskItem[]
-  activity: ActivityItem[]
+export type DashboardSummary = {
+  totalLectures: number
+  totalSlideDecks: number
+  totalTranscriptionRecords: number
+  recentLectures: LectureSummary[]
 }
 

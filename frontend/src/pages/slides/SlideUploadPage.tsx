@@ -1,12 +1,15 @@
-import { FormEvent, useEffect, useRef, useState } from 'react'
+import type { DragEvent, FormEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { slideService } from '../../services/slideService'
 import { useAuth } from '../../hooks/useAuth'
 import type { SlideDeck } from '../../types/slide'
+import { useLanguage } from '../../context/LanguageContext'
 
 const SlideUploadPage = () => {
   const { token } = useAuth()
   const [searchParams] = useSearchParams()
+  const { t } = useLanguage()
   const [lectureId, setLectureId] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -24,12 +27,12 @@ const SlideUploadPage = () => {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!lectureId || !file) {
-      setError('Vui lòng nhập lecture ID và chọn file slide.')
+      setError(t('slides.errors.missingFields'))
       return
     }
 
     if (!token) {
-      setError('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.')
+      setError(t('slides.errors.sessionExpired'))
       return
     }
 
@@ -49,87 +52,102 @@ const SlideUploadPage = () => {
         fileInputRef.current.value = ''
       }
     } catch (uploadError) {
-      const message = uploadError instanceof Error ? uploadError.message : 'Upload thất bại, vui lòng thử lại.'
+      const message = uploadError instanceof Error ? uploadError.message : t('slides.errors.uploadFailed')
       setError(message)
     } finally {
       setIsUploading(false)
     }
   }
 
-  return (
-    <section className="slide-upload">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Tài nguyên bài giảng</p>
-          <h1>Upload slide deck lên Google Cloud</h1>
-          <p className="subtitle">
-            Chọn lecture cần gắn slide và upload file (PDF/PPTX). Backend sẽ đẩy lên bucket được cấu hình và lưu lại
-            asset ID trong cơ sở dữ liệu.
-          </p>
-        </div>
-      </header>
+  const handleDrop = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault()
+    const droppedFile = event.dataTransfer.files?.[0]
+    if (droppedFile) {
+      setFile(droppedFile)
+    }
+  }
 
-      <div className="upload-card">
-        <form className="slide-form" onSubmit={handleSubmit}>
-          <label className="form-field">
-            Mã lecture
+  return (
+    <>
+      <section className="page-hero">
+        <div>
+          <p className="topbar__bread">{t('slides.breadcrumb')}</p>
+          <h1>{t('slides.title')}</h1>
+        </div>
+      </section>
+
+      <section className="form-section">
+        <form className="form-grid" onSubmit={handleSubmit}>
+          <label>
+            {t('slides.lectureId')}
             <input
               type="number"
               min="1"
-              placeholder="Ví dụ: 101"
+              placeholder={t('slides.placeholders.lectureId')}
               value={lectureId}
               onChange={(event) => setLectureId(event.target.value)}
               required
             />
           </label>
 
-          <label className="form-field">
-            Chọn file slide
+          <label
+            className="upload-dropzone"
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={handleDrop}
+            htmlFor="slide-file-input"
+          >
+            <strong>{t('slides.dropTitle')}</strong>
+            <span>{t('slides.dropHint')}</span>
             <input
+              id="slide-file-input"
               ref={fileInputRef}
               type="file"
               accept=".pdf,.ppt,.pptx"
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-              required
+              hidden
             />
-            <span className="field-hint">Hỗ trợ PDF, PPT, PPTX (tối đa 50MB).</span>
+            {file && <span>{t('slides.selectedFile', { fileName: file.name })}</span>}
           </label>
 
           {error && <p className="form-error">{error}</p>}
 
-          <button className="primary-btn" type="submit" disabled={isUploading}>
-            {isUploading ? 'Đang upload...' : 'Upload slide'}
-          </button>
+          <div className="form-actions">
+            <button className="secondary-button" type="reset" onClick={() => setFile(null)}>
+              {t('slides.reset')}
+            </button>
+            <button className="primary-button" type="submit" disabled={isUploading}>
+              {isUploading ? t('slides.uploading') : t('slides.upload')}
+            </button>
+          </div>
         </form>
-      </div>
+      </section>
 
       {recentUpload && (
-        <div className="upload-card success">
-          <h2>Slide đã được lưu</h2>
-          <ul className="upload-meta">
+        <section className="form-section">
+          <h2>{t('slides.history')}</h2>
+          <ul className="upload-list">
             <li>
-              <span>Lecture ID</span>
+              <span>{t('slides.status.lectureId')}</span>
               <strong>{recentUpload.lectureId}</strong>
             </li>
             <li>
-              <span>Tên gốc</span>
-              <strong>{recentUpload.originalName ?? 'N/A'}</strong>
+              <span>{t('slides.status.originalName')}</span>
+              <strong>{recentUpload.originalName ?? '不明'}</strong>
             </li>
             <li>
-              <span>ID Google Cloud</span>
+              <span>{t('slides.status.gcpAssetId')}</span>
               <strong>{recentUpload.gcpAssetId}</strong>
             </li>
             <li>
-              <span>Trạng thái</span>
+              <span>{t('slides.status.uploadStatus')}</span>
               <strong>{recentUpload.uploadStatus}</strong>
             </li>
           </ul>
-        </div>
+        </section>
       )}
-    </section>
+    </>
   )
 }
 
 export default SlideUploadPage
-
 

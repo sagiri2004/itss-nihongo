@@ -12,6 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.Instant;
@@ -66,6 +67,7 @@ public class SlideDeckEntity {
     private Instant createdAt;
 
     @OneToMany(mappedBy = "slideDeck", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("pageNumber ASC")
     @Builder.Default
     private List<SlidePageEntity> pages = new ArrayList<>();
 

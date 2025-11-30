@@ -1,10 +1,12 @@
-import type { DashboardData } from '../types/dashboard'
-import { dashboardData } from '../data/dashboard'
+import type { DashboardSummary } from '../types/dashboard'
+import { httpClient } from './httpClient'
 
 export const dashboardService = {
-  async fetchDashboard(): Promise<DashboardData> {
-    await new Promise((resolve) => setTimeout(resolve, 350))
-    return dashboardData
+  fetchDashboard(token: string, limit = 5): Promise<DashboardSummary> {
+    const params = new URLSearchParams({ limit: String(limit) })
+    return httpClient<DashboardSummary>(`/api/dashboard/summary?${params.toString()}`, {
+      token,
+    })
   },
 }
 

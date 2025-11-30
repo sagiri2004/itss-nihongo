@@ -1,14 +1,20 @@
-import type { DashboardData } from '../types/dashboard'
-import { dashboardData } from '../data/dashboard'
+import type { DashboardSummary } from '../types/dashboard'
 
 type Listener = () => void
 
-let state: DashboardData = dashboardData
+const initialState: DashboardSummary = {
+  totalLectures: 0,
+  totalSlideDecks: 0,
+  totalTranscriptionRecords: 0,
+  recentLectures: [],
+}
+
+let state: DashboardSummary = initialState
 const listeners = new Set<Listener>()
 
 export const dashboardStore = {
   getState: () => state,
-  setState: (nextState: DashboardData) => {
+  setState: (nextState: DashboardSummary) => {
     state = nextState
     listeners.forEach((listener) => listener())
   },

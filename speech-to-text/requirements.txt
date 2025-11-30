@@ -1,0 +1,57 @@
+# Core API Clients
+assemblyai>=0.32.0
+python-dotenv
+boto3
+
+# Core Google Cloud
+google-cloud-speech>=2.20.0
+google-cloud-storage>=2.10.0
+google-cloud-translate>=3.11.0
+
+# PDF Processing
+PyMuPDF>=1.23.0
+pdfplumber==0.10.0
+
+# Japanese NLP
+mecab-python3>=1.0.6
+unidic-lite>=1.0.8
+
+# OCR (Phase 2 Week 3)
+pytesseract>=0.3.10
+Pillow>=10.0.0
+
+# Audio Processing
+soundfile>=0.12.1
+librosa>=0.10.0
+scipy>=1.11.0
+
+# Semantic Embeddings
+sentence-transformers>=2.2.2
+faiss-cpu>=1.7.4
+
+# Text Matching
+python-Levenshtein>=0.21.0
+rapidfuzz>=3.0.0
+
+# CLI and Utilities
+click>=8.1.0
+tqdm>=4.65.0
+python-dotenv>=1.0.0
+
+# Database
+sqlalchemy>=2.0.0
+
+# Streamlit UI
+streamlit>=1.28.0
+streamlit-webrtc>=0.47.0
+av>=10.0.0
+pydub>=0.25.1
+
+# API
+fastapi>=0.110.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+
+# Data Processing
+numpy>=1.24.0
+pandas>=2.0.0.0

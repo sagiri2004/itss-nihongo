@@ -1,17 +1,20 @@
 import { Outlet } from 'react-router-dom'
+import { useLanguage } from '../context/LanguageContext'
 
-const AuthLayout = () => (
-  <div className="auth-layout">
-    <div className="auth-card">
-      <div className="auth-brand">
-        <p className="eyebrow">ITSS Nihongo</p>
-        <h1>Đồng bộ tài khoản</h1>
-        <p>Đăng nhập để tiếp tục theo dõi trạng thái học tập trên dashboard.</p>
+const AuthLayout = () => {
+  const { t } = useLanguage()
+
+  return (
+    <div className="auth-shell">
+      <div className="auth-illustration">
+        <span>{t('common.brand')}</span>
       </div>
-      <Outlet />
+      <div className="auth-panel">
+        <Outlet />
+      </div>
     </div>
-  </div>
-)
+  )
+}
 
 export default AuthLayout
 
