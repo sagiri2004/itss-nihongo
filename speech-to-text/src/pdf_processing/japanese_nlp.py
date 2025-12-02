@@ -37,7 +37,7 @@ class JapaneseNLP:
     """
     
     # Japanese stop words (particles, common verbs, etc.)
-    STOP_WORDS = {
+    JAPANESE_STOP_WORDS = {
         # Particles
         'は', 'の', 'を', 'に', 'が', 'と', 'で', 'から', 'まで', 'より',
         'へ', 'や', 'か', 'も', 'ね', 'よ', 'な', 'わ', 'ば', 'ど',
@@ -49,7 +49,41 @@ class JapaneseNLP:
         'ここ', 'そこ', 'あそこ', 'どこ', 'こちら', 'そちら', 'あちら', 'どちら',
         # Common words
         'こと', 'もの', 'ため', 'よう', 'ところ', 'とき', 'ほど', 'くらい',
+        # Additional functional words (based on JSON analysis)
+        'なし', 'あり',  # Nashi (không có), Ari (có) - common in tables
+        'さん', 'くん', 'ちゃん',  # Honorifics
+        'スライド', 'ページ',  # Slide metadata
+        # Katakana forms (common in technical contexts)
+        'スル', 'コト', 'イル', 'ナシ',  # Katakana versions of suru, koto, iru, nashi
     }
+    
+    # English stop words
+    ENGLISH_STOP_WORDS = {
+        'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+        'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'be',
+        'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
+        'would', 'should', 'could', 'may', 'might', 'must', 'can', 'this',
+        'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they',
+        'what', 'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each',
+        'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no',
+        'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very',
+        # OCR noise patterns (based on JSON analysis)
+        'ee', 'ae', 'mm', 'oo', 'ii', 'uu', 'aa',  # Repeated letters from OCR errors
+        'th', 'ph', 'ch', 'ng',  # Vietnamese consonants standing alone (OCR word splitting errors)
+    }
+    
+    # Vietnamese stop words
+    VIETNAMESE_STOP_WORDS = {
+        'của', 'là', 'các', 'những', 'để', 'với', 'trong', 'trên', 'về',
+        'cho', 'từ', 'đến', 'và', 'hoặc', 'nhưng', 'mà', 'nếu', 'thì',
+        'khi', 'sau', 'trước', 'đã', 'đang', 'sẽ', 'có', 'không', 'được',
+        'bị', 'bởi', 'vì', 'do', 'nên', 'nữa', 'rồi', 'cũng', 'đều',
+        'mỗi', 'mọi', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy',
+        'tám', 'chín', 'mười', 'này', 'đó', 'kia', 'đây', 'đấy'
+    }
+    
+    # Combined stop words
+    STOP_WORDS = JAPANESE_STOP_WORDS | ENGLISH_STOP_WORDS | VIETNAMESE_STOP_WORDS
     
     # Kanji numbers to Arabic
     KANJI_NUMBERS = {
@@ -109,31 +143,152 @@ class JapaneseNLP:
             
         return tokens
         
-    def extract_keywords(self, text: str) -> List[str]:
+    def _is_japanese_text(self, text: str) -> bool:
         """
-        Extract content keywords (nouns, verbs, adjectives).
+        Check if text contains Japanese characters.
+        
+        Uses lightweight regex check instead of langdetect.
+        """
+        return bool(re.search(r'[\u3000-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', text))
+    
+    def _tokenize_latin(self, text: str) -> List[str]:
+        """
+        Tokenize Latin text (English/Vietnamese) using regex.
+        
+        Splits on whitespace and punctuation, keeps alphanumeric tokens.
+        """
+        # Normalize text first (NFKC)
+        normalized = unicodedata.normalize('NFKC', text)
+        
+        # Split on whitespace and punctuation
+        tokens = re.findall(r'\b\w+\b', normalized)
+        
+        # Filter: keep only meaningful tokens
+        result = []
+        for token in tokens:
+            # Skip single characters (except 'I', 'a' in English context)
+            if len(token) < 2:
+                continue
+            # Skip pure numbers (unless they're part of technical terms)
+            if token.isdigit() and len(token) < 3:
+                continue
+            result.append(token.lower())
+        
+        return result
+    
+    def extract_keywords(self, text: str, is_ocr_text: bool = False) -> List[str]:
+        """
+        Extract content keywords using hybrid approach.
+        
+        - Japanese text: Uses MeCab tokenization
+        - Latin text: Uses regex tokenization
+        - Mixed content: MeCab handles it (keeps "GitHub" as one token)
+        - OCR text: Uses more lenient fallback (70% threshold instead of 50%)
         
         Args:
             text: Input text
+            is_ocr_text: Whether text comes from OCR (more lenient fallback)
             
         Returns:
             List of keyword base forms
         """
-        tokens = self.tokenize(text)
+        if not text:
+            return []
+        
+        # Normalize text first (NFKC for full-width/half-width)
+        normalized = unicodedata.normalize('NFKC', text)
+        
+        # Check if contains Japanese
+        has_japanese = self._is_japanese_text(normalized)
+        
         keywords = []
         
-        for token in tokens:
-            # Keep nouns, verbs, and adjectives
-            if token.pos in ['名詞', '動詞', '形容詞']:
-                # Skip stop words
-                if self.use_stop_words and token.base_form in self.STOP_WORDS:
-                    continue
-                # Skip single character words (usually not meaningful)
-                if len(token.base_form) < 2:
-                    continue
-                keywords.append(token.base_form)
+        if has_japanese:
+            # Use MeCab for Japanese (handles mixed content well)
+            try:
+                tokens = self.tokenize(normalized)
                 
-        return keywords
+                if not tokens:
+                    # Empty tokens, fallback to regex
+                    latin_tokens = self._tokenize_latin(normalized)
+                    keywords.extend(latin_tokens)
+                else:
+                    # Check if MeCab failed (too many unknown/single char tokens)
+                    # OCR text: more lenient threshold (70% vs 50%)
+                    threshold = 0.7 if is_ocr_text else 0.5
+                    unknown_count = sum(1 for t in tokens if t.pos == 'unknown' or len(t.surface) == 1)
+                    
+                    if unknown_count > len(tokens) * threshold:
+                        # MeCab failed, fallback to regex (only log if not OCR)
+                        if not is_ocr_text:
+                            logger.debug(f"MeCab returned too many unknowns ({unknown_count}/{len(tokens)}), falling back to regex")
+                        latin_tokens = self._tokenize_latin(normalized)
+                        keywords.extend(latin_tokens)
+                    else:
+                        # Process MeCab tokens
+                        for token in tokens:
+                            # Keep nouns, verbs, and adjectives
+                            if token.pos in ['名詞', '動詞', '形容詞']:
+                                # Skip stop words
+                                if self.use_stop_words and token.base_form in self.STOP_WORDS:
+                                    continue
+                                # Skip single character words
+                                if len(token.base_form) < 2:
+                                    continue
+                                keywords.append(token.base_form)
+            except Exception as e:
+                # Only log if not OCR (OCR errors are expected)
+                if not is_ocr_text:
+                    logger.warning(f"MeCab tokenization failed: {e}, falling back to regex")
+                # Fallback to regex
+                latin_tokens = self._tokenize_latin(normalized)
+                keywords.extend(latin_tokens)
+        else:
+            # Pure Latin text - use regex tokenization
+            latin_tokens = self._tokenize_latin(normalized)
+            keywords.extend(latin_tokens)
+        
+        # Generalized noise filtering for Latin text (English/Vietnamese/OCR noise)
+        valid_keywords = []
+        
+        for kw in keywords:
+            # Rule 1: Japanese text - Keep if not in stop words
+            if self._is_japanese_text(kw):
+                if not self.use_stop_words or kw not in self.JAPANESE_STOP_WORDS:
+                    valid_keywords.append(kw)
+                continue
+            
+            # Rule 2: Latin text - Apply generalized filtering rules
+            
+            # Rule A: Filter repeated character patterns (aaaa, hhh, mmm)
+            # This catches OCR errors and keyboard typos
+            if re.match(r'^(.)\1+$', kw):
+                continue  # Skip repeated character words
+            
+            # Rule B: Length-based filtering
+            if len(kw) < 2:
+                continue  # Skip single character words
+            
+            if len(kw) == 2:
+                # Intelligent 2-character handling:
+                # - UPPERCASE (IT, AI, UI, UX) -> Keep (likely acronym)
+                # - lowercase (is, at, mm, hh) -> Skip (likely stopword or OCR noise)
+                # - digits -> Keep (might be version numbers like "v2")
+                if not kw.isupper() and not kw.isdigit():
+                    continue  # Skip lowercase 2-char words
+            
+            # Rule C: Non-alphanumeric check (catch regex misses)
+            if not kw.isalnum():
+                continue  # Skip words with special characters
+            
+            # Rule D: Stop words check (general lists)
+            if self.use_stop_words:
+                if kw.lower() in self.ENGLISH_STOP_WORDS or kw.lower() in self.VIETNAMESE_STOP_WORDS:
+                    continue
+            
+            valid_keywords.append(kw)
+        
+        return valid_keywords
         
     def normalize_text(self, text: str) -> str:
         """
