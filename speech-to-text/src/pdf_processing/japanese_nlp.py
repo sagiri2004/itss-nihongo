@@ -229,9 +229,17 @@ class JapaneseNLP:
                         for token in tokens:
                             # Keep nouns, verbs, and adjectives
                             if token.pos in ['名詞', '動詞', '形容詞']:
-                                # Skip stop words
-                                if self.use_stop_words and token.base_form in self.STOP_WORDS:
-                                    continue
+                                # Generalized stopwords check (Hiragana normalization)
+                                if self.use_stop_words:
+                                    # Check base form
+                                    if token.base_form in self.STOP_WORDS:
+                                        continue
+                                    # Convert Katakana -> Hiragana to check stopwords
+                                    # Example: デキル (dekiru in Katakana) -> できる (in Hiragana)
+                                    hiragana_form = self.to_hiragana(token.base_form)
+                                    if hiragana_form in self.STOP_WORDS:
+                                        continue
+                                
                                 # Skip single character words
                                 if len(token.base_form) < 2:
                                     continue
@@ -248,40 +256,33 @@ class JapaneseNLP:
             latin_tokens = self._tokenize_latin(normalized)
             keywords.extend(latin_tokens)
         
-        # Generalized noise filtering for Latin text (English/Vietnamese/OCR noise)
+        # Generalized noise filtering (Final validation)
         valid_keywords = []
         
         for kw in keywords:
-            # Rule 1: Japanese text - Keep if not in stop words
+            # Rule 1: Japanese text - Keep (already filtered stopwords above)
             if self._is_japanese_text(kw):
-                if not self.use_stop_words or kw not in self.JAPANESE_STOP_WORDS:
-                    valid_keywords.append(kw)
+                valid_keywords.append(kw)
                 continue
             
-            # Rule 2: Latin text - Apply generalized filtering rules
+            # Rule 2: Latin text (English/Vietnamese) - Filter using Regex Rules (Generalization)
             
-            # Rule A: Filter repeated character patterns (aaaa, hhh, mmm)
-            # This catches OCR errors and keyboard typos
+            # Rule A: Filter repeated character patterns (OCR Noise: aaa, mmm, zz)
             if re.match(r'^(.)\1+$', kw):
                 continue  # Skip repeated character words
             
-            # Rule B: Length-based filtering
-            if len(kw) < 2:
-                continue  # Skip single character words
+            # Rule B: Filter single character words (except numbers)
+            if len(kw) < 2 and not kw.isdigit():
+                continue  # Skip single char words
             
+            # Rule C: Smart 2-character word handling
             if len(kw) == 2:
-                # Intelligent 2-character handling:
-                # - UPPERCASE (IT, AI, UI, UX) -> Keep (likely acronym)
-                # - lowercase (is, at, mm, hh) -> Skip (likely stopword or OCR noise)
-                # - digits -> Keep (might be version numbers like "v2")
+                # Keep: UPPERCASE (IT, AI, UI), Numbers (5G)
+                # Skip: lowercase (is, at, mm, hh) -> Stopwords/Noise
                 if not kw.isupper() and not kw.isdigit():
                     continue  # Skip lowercase 2-char words
             
-            # Rule C: Non-alphanumeric check (catch regex misses)
-            if not kw.isalnum():
-                continue  # Skip words with special characters
-            
-            # Rule D: Stop words check (general lists)
+            # Rule D: Stop words check
             if self.use_stop_words:
                 if kw.lower() in self.ENGLISH_STOP_WORDS or kw.lower() in self.VIETNAMESE_STOP_WORDS:
                     continue

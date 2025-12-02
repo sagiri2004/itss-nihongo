@@ -419,10 +419,12 @@ class PDFExtractor:
     
     def _should_trigger_ocr(self, text: str, page_area: float) -> bool:
         """
-        Generalized decision: Should OCR be triggered?
+        Quality-based OCR trigger decision.
         
-        Uses Signal-to-Noise Ratio instead of hardcoded thresholds.
-        Works for any PDF type (Native, Scan, Hybrid).
+        Trusts native text by default, only triggers OCR when text quality is poor.
+        Uses valid character ratio instead of absolute character count for generalization.
+        
+        This prevents replacing good native text (e.g., title slides) with OCR noise.
         
         Args:
             text: Extracted native text from PDF
@@ -433,46 +435,43 @@ class PDFExtractor:
         """
         clean_text = text.strip()
         
-        # Rule 1: Empty text -> Definitely need OCR
+        # Rule 1: Completely empty page -> Definitely need OCR
         if not clean_text:
             return True
         
         char_count = len(clean_text)
         
-        # Rule 2: Minimum content check (generalized)
-        # A slide page should have at least some meaningful content
-        # Using relative threshold: at least 50 chars for a typical slide
-        if char_count < 50:
-            return True
-        
-        # Rule 3: Text quality check (Garbage Detection)
-        # Count valid alphanumeric characters
-        valid_chars = sum(1 for c in clean_text if c.isalnum())
+        # Calculate valid character ratio
+        # Count letters, numbers, and basic punctuation (not icons, table chars, or encoding garbage)
+        valid_chars = sum(
+            1 for c in clean_text 
+            if c.isalnum() or c in ".,:;!?()[]"
+        )
         valid_ratio = valid_chars / char_count if char_count > 0 else 0
         
-        # If less than 50% are valid characters -> Text layer is corrupted
-        # (too many special chars, spaces, or garbage)
-        if valid_ratio < 0.5:
-            return True
+        # RULE 1: Trust Native Text (Generalization Core)
+        # If > 80% content is valid characters -> Native text is good -> DON'T OCR
+        # This solves the issue of short title slides being misidentified as errors
+        if valid_ratio > 0.8:
+            return False
         
-        # Rule 4: Encoding error detection (Mojibake)
-        # Check for Private Use Area (Co) and Not Assigned (Cn) characters
+        # RULE 2: Encoding error detection (Mojibake)
+        # Check for Private Use Area (Co) or Not Assigned (Cn) characters
         unknown_chars = sum(
             1 for c in clean_text 
             if unicodedata.category(c) in ('Co', 'Cn')
         )
         if char_count > 0 and (unknown_chars / char_count) > 0.1:
-            # More than 10% unknown characters -> Encoding issue
+            # > 10% unknown characters -> Font corrupted -> Need OCR
             return True
         
-        # Rule 5: Density check (as fallback)
-        # Calculate characters per square inch
-        density = char_count / page_area if page_area > 0 else 0
-        # Very low density suggests scanned content
-        MIN_DENSITY = 5.0  # Lower threshold for generalization
-        if density < MIN_DENSITY:
+        # RULE 3: Fallback for pages that are both short AND dirty
+        # Only OCR if text is both short (<50) AND has low valid ratio (<50%)
+        # This prevents OCR on short but clean title slides
+        if char_count < 50 and valid_ratio < 0.5:
             return True
         
+        # Default: Trust native text (don't trigger OCR)
         return False
     
     def _clean_ocr_text(self, ocr_text: str) -> str:
