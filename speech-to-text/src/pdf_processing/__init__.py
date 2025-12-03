@@ -15,10 +15,12 @@ from .pdf_extractor import PDFExtractor
 from .japanese_nlp import JapaneseNLP
 from .keyword_indexer import KeywordIndexer
 from .embedding_generator import EmbeddingGenerator
+from .text_summarizer import TextSummarizer
 
 __all__ = [
     'PDFExtractor',
     'JapaneseNLP',
     'KeywordIndexer',
     'EmbeddingGenerator',
+    'TextSummarizer',
 ]

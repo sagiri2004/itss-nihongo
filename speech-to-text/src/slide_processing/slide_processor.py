@@ -15,6 +15,7 @@ from ..pdf_processing.pdf_extractor import PDFExtractor, SlideContent
 from ..pdf_processing.japanese_nlp import JapaneseNLP
 from ..pdf_processing.keyword_indexer import KeywordIndexer
 from ..pdf_processing.embedding_generator import EmbeddingGenerator
+from ..pdf_processing.text_summarizer import TextSummarizer
 from ..matching.exact_matcher import ExactMatcher
 from ..matching.fuzzy_matcher import FuzzyMatcher
 from ..matching.semantic_matcher import SemanticMatcher
@@ -630,6 +631,7 @@ class SlideProcessor:
                 "bullets": slide.bullets,
                 "body": slide.body,
                 "all_text": slide.all_text,
+                "summary": slide.summary,  # Semantic summary processed by NLP
                 "slide_text": self.slide_texts[i] if i < len(self.slide_texts) else "",
                 "keywords": self.slide_keywords.get(slide_id, []),
                 "keyword_count": len(self.slide_keywords.get(slide_id, [])),
@@ -665,6 +667,17 @@ class SlideProcessor:
                 "has_faiss_index": self.embedding_gen.faiss_index is not None,
                 "total_embeddings": len(self.slide_texts)
             }
+        
+        # Generate global summary (all_summary) using TextSummarizer
+        summarizer = TextSummarizer()
+        slides_data_for_summary = [
+            {
+                "page_number": slide.page_number,
+                "summary": slide.summary
+            }
+            for slide in self.slides
+        ]
+        output_data["all_summary"] = summarizer.generate_global_summary(slides_data_for_summary)
         
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(output_data, f, ensure_ascii=False, indent=2)

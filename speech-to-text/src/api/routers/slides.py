@@ -59,6 +59,7 @@ class SlideDetails(BaseModel):
     body: List[str] = Field(default_factory=list)
     keywords: List[str] = Field(default_factory=list)
     all_text: str = Field("", alias="all_text")
+    summary: str = Field("", alias="summary")  # Semantic summary processed by NLP
 
     class Config:
         populate_by_name = True
@@ -141,6 +142,7 @@ def _build_slide_payload(processor: SlideProcessor) -> Tuple[List[Dict[str, Any]
                 "body": slide.body,
                 "keywords": slide_keywords,
                 "all_text": slide.all_text,
+                "summary": slide.summary,  # Semantic summary processed by NLP
             }
         )
 
@@ -214,6 +216,7 @@ async def process_slide(request: SlideProcessingRequest) -> SlideProcessingRespo
                 body=slide.get("body", []),
                 keywords=slide.get("keywords", []),
                 all_text=slide.get("all_text", ""),
+                summary=slide.get("summary", ""),
             )
             for slide in slides_payload
         ]

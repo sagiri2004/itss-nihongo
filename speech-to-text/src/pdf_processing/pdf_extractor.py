@@ -14,6 +14,8 @@ import logging
 import re
 import unicodedata
 
+from .text_summarizer import TextSummarizer
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,6 +41,7 @@ class SlideContent:
     body: List[str]
     all_text: str
     text_blocks: List[TextBlock]
+    summary: str = ""  # Semantic summary processed by NLP
 
 
 class PDFExtractor:
@@ -76,6 +79,9 @@ class PDFExtractor:
         self.enable_coordinate_sorting = enable_coordinate_sorting
         self.enable_noise_filtering = enable_noise_filtering
         self.enable_header_footer_filtering = enable_header_footer_filtering
+        
+        # Initialize text summarizer for NLP-based text reconstruction
+        self.summarizer = TextSummarizer()
         
         # Whitelist for technical acronyms (exempt from caps ratio check)
         self.acronym_whitelist = {
@@ -187,6 +193,15 @@ class PDFExtractor:
             " ".join(body)
         ]).strip()
         
+        # Generate semantic summary using NLP
+        summary = self.summarizer.generate_slide_summary(
+            title=title,
+            headings=headings,
+            bullets=bullets,
+            body=body,
+            all_text_raw=all_text
+        )
+        
         return SlideContent(
             page_number=page_number,
             title=title,
@@ -194,7 +209,8 @@ class PDFExtractor:
             bullets=bullets,
             body=body,
             all_text=all_text,
-            text_blocks=text_blocks
+            text_blocks=text_blocks,
+            summary=summary
         )
         
     def _extract_text_blocks(self, page: fitz.Page, page_number: int) -> List[TextBlock]:
