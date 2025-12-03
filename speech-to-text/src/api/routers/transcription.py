@@ -188,27 +188,40 @@ async def websocket_transcribe(websocket: WebSocket) -> None:
     async def send_chunk(chunk_bytes: bytes) -> None:
         nonlocal session_started, pending_start_config, session_id, presentation_id
 
+        # 1. Nếu session chưa init (chưa nhận lệnh start), buffer tạm vào list cục bộ
         if session_id is None:
-            logger.debug("Buffering audio chunk (%d bytes) because session is not yet initialized", len(chunk_bytes))
+            logger.debug("Buffering audio chunk (%d bytes) locally - session not initialized", len(chunk_bytes))
             pending_audio_chunks.append(chunk_bytes)
             return
 
-        pending_audio_chunks.append(chunk_bytes)
+        # 2. Gom tất cả audio cần gửi (pending cũ + chunk mới)
+        chunks_to_send = []
+        if pending_audio_chunks:
+            chunks_to_send.extend(pending_audio_chunks)
+            pending_audio_chunks.clear()
+        chunks_to_send.append(chunk_bytes)
 
         try:
+            # 3. BUFFER FIRST: Đẩy audio vào Queue của Session Manager trước
+            # Việc này an toàn vì create_session đã set status='INITIALIZING',
+            # cho phép send_audio_chunk hoạt động.
+            for chunk in chunks_to_send:
+                # Chạy trong executor để không block async loop
+                await run_blocking(manager.send_audio_chunk, session_id, chunk)
+            
+            # 4. START SECOND: Khởi động gRPC Stream sau khi queue đã có dữ liệu
             if not session_started and pending_start_config is not None:
                 logger.info(
-                    "Starting session %s before sending queued chunks (lang=%s, model=%s, buffered=%d)",
-                    session_id,
-                    pending_start_config.get("language_code"),
-                    pending_start_config.get("model"),
-                    len(pending_audio_chunks),
+                    "Starting session %s after buffering %d chunks",
+                    session_id, len(chunks_to_send)
                 )
                 await run_blocking(
                     manager.start_session,
                     session_id,
                     **pending_start_config,
                 )
+                
+                # Thông báo cho Client biết session đã bắt đầu nhận dạng
                 await websocket.send_json(
                     {
                         "event": "session_started",
@@ -221,19 +234,17 @@ async def websocket_transcribe(websocket: WebSocket) -> None:
                 session_started = True
                 pending_start_config = None
 
-            while pending_audio_chunks:
-                chunk_to_send = pending_audio_chunks.pop(0)
-                await run_blocking(manager.send_audio_chunk, session_id, chunk_to_send)
-                logger.debug("Sent chunk of %d bytes for session %s", len(chunk_to_send), session_id)
-        except Exception as exc:  # pragma: no cover - gRPC errors
-            await websocket.send_json(
-                {
-                    "event": "error",
-                    "message": f"Failed to send audio: {exc}",
-                }
-            )
+        except Exception as exc:
+            # Xử lý lỗi gRPC hoặc Logic
+            error_msg = f"Failed to process audio stream: {str(exc)}"
+            logger.error("Session %s error: %s", session_id, error_msg)
+            
+            await websocket.send_json({"event": "error", "message": error_msg})
+            
+            # Reset state để có thể thử lại nếu client muốn
             session_started = False
-            pending_start_config = None
+            # Lưu ý: Không clear pending_start_config để có thể retry start
+            # Nhưng clear buffer audio để tránh tắc nghẽn bộ nhớ
             pending_audio_chunks.clear()
             logger.error("Failed sending chunk for session %s: %s", session_id, exc)
 
@@ -316,12 +327,17 @@ async def websocket_transcribe(websocket: WebSocket) -> None:
                     }
                     session_started = False
 
+                    # Replay any buffered chunks (if audio arrived before "start" message)
+                    # Note: We manually manage the list here to avoid iteration issues,
+                    # then let send_chunk process each chunk. send_chunk will check
+                    # pending_audio_chunks again (now empty) and process only the current chunk.
                     if pending_audio_chunks:
                         logger.info(
                             "Replaying %d buffered chunks for session %s before starting gRPC stream",
                             len(pending_audio_chunks),
                             session_id,
                         )
+                        # Copy and clear to avoid iteration issues, then process each chunk
                         buffered_chunks = pending_audio_chunks.copy()
                         pending_audio_chunks.clear()
                         for buffered_chunk in buffered_chunks:

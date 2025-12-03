@@ -349,14 +349,20 @@ class StreamingSessionManager:
             return False
         
         try:
-            # Validate and process chunk
-            if session.audio_handler.process_chunk(chunk):
-                # Put audio chunk into queue for request generator
+            # Process chunk (returns list of ready chunks after handling edge cases)
+            ready_chunks = session.audio_handler.process_chunk(chunk)
+            
+            if not ready_chunks:
+                # Chunk was buffered in accumulator, not ready to send yet
+                return True
+            
+            # Put all ready chunks into queue
+            for ready_chunk in ready_chunks:
                 try:
-                    session.audio_queue.put(chunk, timeout=1.0)
+                    session.audio_queue.put(ready_chunk, timeout=1.0)
                     
                     session.total_chunks_sent += 1
-                    session.total_bytes_sent += len(chunk)
+                    session.total_bytes_sent += len(ready_chunk)
                     session.last_audio_time = time.time()
                     
                 except queue.Full:
@@ -371,24 +377,22 @@ class StreamingSessionManager:
                     )
                     raise StreamInterruptedError(f"Failed to queue audio: {e}")
                 
-                # Check if renewal needed
-                if session.should_renew(self.RENEWAL_THRESHOLD_SECONDS):
-                    logger.warning(
-                        f"Session {session_id} approaching timeout, "
-                        "renewal needed"
-                    )
-                    # Renewal will be handled by monitoring thread
-                
                 logger.debug(
                     f"Sent chunk to session {session_id}: "
-                    f"{len(chunk)} bytes "
+                    f"{len(ready_chunk)} bytes "
                     f"(total: {session.total_chunks_sent} chunks, "
                     f"{session.total_bytes_sent} bytes)"
                 )
-                
-                return True
             
-            return False
+            # Check if renewal needed
+            if session.should_renew(self.RENEWAL_THRESHOLD_SECONDS):
+                logger.warning(
+                    f"Session {session_id} approaching timeout, "
+                    "renewal needed"
+                )
+                # Renewal will be handled by monitoring thread
+            
+            return True
             
         except Exception as e:
             logger.error(
@@ -413,6 +417,22 @@ class StreamingSessionManager:
         
         try:
             session.status = SessionStatus.CLOSING
+            
+            # Flush any remaining accumulated audio before closing
+            remaining_chunks = session.audio_handler.flush_all()
+            for remaining_chunk in remaining_chunks:
+                try:
+                    session.audio_queue.put(remaining_chunk, timeout=0.5)
+                    logger.debug(
+                        f"Flushed final chunk for {session_id}: "
+                        f"{len(remaining_chunk)} bytes"
+                    )
+                except queue.Full:
+                    logger.warning(
+                        f"Queue full when flushing final chunk for {session_id}"
+                    )
+                except Exception:
+                    pass  # Ignore errors during flush
             
             # Stop result listener thread
             if session.result_listener_thread:
