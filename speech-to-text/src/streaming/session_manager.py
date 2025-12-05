@@ -383,16 +383,16 @@ class StreamingSessionManager:
                     f"(total: {session.total_chunks_sent} chunks, "
                     f"{session.total_bytes_sent} bytes)"
                 )
-            
-            # Check if renewal needed
-            if session.should_renew(self.RENEWAL_THRESHOLD_SECONDS):
-                logger.warning(
-                    f"Session {session_id} approaching timeout, "
-                    "renewal needed"
-                )
-                # Renewal will be handled by monitoring thread
-            
-            return True
+                
+                # Check if renewal needed
+                if session.should_renew(self.RENEWAL_THRESHOLD_SECONDS):
+                    logger.warning(
+                        f"Session {session_id} approaching timeout, "
+                        "renewal needed"
+                    )
+                    # Renewal will be handled by monitoring thread
+                
+                return True
             
         except Exception as e:
             logger.error(

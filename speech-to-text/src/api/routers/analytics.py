@@ -15,6 +15,10 @@ from ...analytics.context_extraction import (
     ContextExtractor,
     ExportGenerator,
 )
+from ...analytics.intention_analysis import (
+    IntentionAnalyzer,
+    IntentionStatistics,
+)
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
@@ -160,7 +164,7 @@ async def export_contexts_text(request: ContextExtractionRequest) -> Dict[str, s
         return {
             "format": "text",
             "content": text_report,
-            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
         
     except Exception as e:
@@ -174,7 +178,7 @@ async def export_contexts_text(request: ContextExtractionRequest) -> Dict[str, s
 @router.post("/context-extraction/export/html")
 async def export_contexts_html(
     request: ContextExtractionRequest,
-    total_duration: float = Field(3600.0, description="Total recording duration in seconds"),
+    total_duration: float = 3600.0,
 ) -> Dict[str, str]:
     """Export contexts as HTML timeline visualization."""
     try:
@@ -197,7 +201,7 @@ async def export_contexts_html(
         return {
             "format": "html",
             "content": html_timeline,
-            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
         
     except Exception as e:
@@ -205,5 +209,95 @@ async def export_contexts_html(
         raise HTTPException(
             status_code=500,
             detail=f"HTML export failed: {str(e)}"
+        ) from e
+
+
+class IntentionAnalysisRequest(BaseModel):
+    """Request for intention analysis."""
+    
+    presentation_id: str = Field(..., alias="presentation_id")
+    segments: List[Dict[str, Any]] = Field(..., alias="segments")
+    slide_transitions: List[Dict[str, Any]] = Field(default_factory=list, alias="slide_transitions")
+    
+    class Config:
+        populate_by_name = True
+
+
+class IntentionAnalysisResponse(BaseModel):
+    """Response from intention analysis."""
+    
+    presentation_id: str = Field(..., alias="presentation_id")
+    total_segments: int = Field(..., alias="total_segments")
+    segments: List[Dict[str, Any]] = Field(..., alias="segments")
+    statistics: Dict[str, Any] = Field(..., alias="statistics")
+    generated_at: str = Field(..., alias="generated_at")
+    
+    class Config:
+        populate_by_name = True
+
+
+@router.post("/intention-analysis", response_model=IntentionAnalysisResponse)
+async def analyze_intentions(request: IntentionAnalysisRequest) -> IntentionAnalysisResponse:
+    """
+    Analyze teaching intentions from transcript segments.
+    
+    This endpoint implements Week 11-12: Teaching Intention Analysis System.
+    Classifies all segments into intention categories (explanation, emphasis, example, 
+    comparison, warning, summary) to reveal teaching patterns.
+    """
+    try:
+        # Convert slide_transitions format
+        slide_transitions = [
+            (tran.get('timestamp', 0.0), tran.get('slide_id'))
+            for tran in request.slide_transitions
+        ]
+        
+        # Initialize analyzer
+        analyzer = IntentionAnalyzer()
+        
+        # Analyze intentions
+        intention_segments, statistics = analyzer.analyze_intentions(
+            segments=request.segments,
+            slide_transitions=slide_transitions,
+        )
+        
+        # Convert segments to dict
+        segments_dict = [
+            {
+                "segment_id": seg.segment_id,
+                "text": seg.text,
+                "start_time": seg.start_time,
+                "end_time": seg.end_time,
+                "slide_page": seg.slide_page,
+                "intention_category": seg.intention_category,
+                "confidence_score": seg.confidence_score,
+                "key_phrases": seg.key_phrases,
+                "word_count": seg.word_count,
+                "created_at": seg.created_at,
+            }
+            for seg in intention_segments
+        ]
+        
+        # Convert statistics to dict
+        stats_dict = {
+            "total_segments": statistics.total_segments,
+            "total_duration": statistics.total_duration,
+            "by_category": statistics.by_category,
+            "timeline": statistics.timeline,
+        }
+        
+        return IntentionAnalysisResponse(
+            presentation_id=request.presentation_id,
+            total_segments=len(intention_segments),
+            segments=segments_dict,
+            statistics=stats_dict,
+            generated_at=datetime.now(timezone.utc).isoformat(),
+        )
+        
+    except Exception as e:
+        logger.error(f"Intention analysis failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Intention analysis failed: {str(e)}"
         ) from e
 

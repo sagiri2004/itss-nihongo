@@ -13,6 +13,14 @@ from .context_extraction import (
     TranscriptSegment,
 )
 
+from .intention_analysis import (
+    IntentionAnalyzer,
+    IntentionSegment,
+    IntentionStatistics,
+    IntentionClassifier,
+    MultiFactorIntentionScorer,
+)
+
 __all__ = [
     "ContextExtractor",
     "ContextObject",
@@ -22,4 +30,9 @@ __all__ = [
     "ContextTypeClassifier",
     "ContextAggregator",
     "TranscriptSegment",
+    "IntentionAnalyzer",
+    "IntentionSegment",
+    "IntentionStatistics",
+    "IntentionClassifier",
+    "MultiFactorIntentionScorer",
 ]
