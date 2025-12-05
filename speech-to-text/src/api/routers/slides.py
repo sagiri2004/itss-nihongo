@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -11,6 +12,8 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from google.api_core import exceptions as gcs_exceptions
 from google.cloud import storage
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 # Default service account path (same as transcription router)
 DEFAULT_SERVICE_ACCOUNT = Path(__file__).resolve().parents[4] / "speech-processing-prod-9ffbefa55e2c.json"
@@ -152,7 +155,13 @@ def _build_slide_payload(processor: SlideProcessor) -> Tuple[List[Dict[str, Any]
 
 
 def _generate_all_summary(processor: SlideProcessor) -> str:
-    """Generate global summary for all slides using TextSummarizer."""
+    """
+    Generate global summary for all slides using TextSummarizer.
+    
+    Raises:
+        RuntimeError: If TextSummarizer initialization fails (consistent with PDFExtractor behavior).
+        This ensures dependency issues are visible rather than silently masked.
+    """
     try:
         summarizer = TextSummarizer()
         slides_data_for_summary = [
@@ -163,9 +172,29 @@ def _generate_all_summary(processor: SlideProcessor) -> str:
             for slide in processor.slides
         ]
         return summarizer.generate_global_summary(slides_data_for_summary)
-    except Exception:
-        # Return empty string if summarization fails
-        return ""
+    except RuntimeError as e:
+        # RuntimeError from TextSummarizer indicates missing dependencies (ginza, ja-ginza)
+        # This is the same error that would fail PDFExtractor, so we should propagate it
+        # for consistency and visibility
+        logger.error(
+            "Failed to generate all_summary: TextSummarizer initialization failed. "
+            "This indicates missing NLP dependencies (ginza, ja-ginza). "
+            "Error: %s",
+            str(e)
+        )
+        raise
+    except Exception as e:
+        # Other exceptions (e.g., processing errors) should also be logged and raised
+        # to avoid masking real problems
+        logger.error(
+            "Failed to generate all_summary: Unexpected error during summarization. "
+            "Error: %s",
+            str(e),
+            exc_info=True
+        )
+        raise RuntimeError(
+            f"Failed to generate global summary: {str(e)}"
+        ) from e
 
 
 @router.post("/upload")
