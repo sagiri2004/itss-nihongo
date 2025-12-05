@@ -15,6 +15,7 @@ from ..pdf_processing.pdf_extractor import PDFExtractor, SlideContent
 from ..pdf_processing.japanese_nlp import JapaneseNLP
 from ..pdf_processing.keyword_indexer import KeywordIndexer
 from ..pdf_processing.embedding_generator import EmbeddingGenerator
+from ..pdf_processing.text_summarizer import TextSummarizer
 from ..matching.exact_matcher import ExactMatcher
 from ..matching.fuzzy_matcher import FuzzyMatcher
 from ..matching.semantic_matcher import SemanticMatcher
@@ -59,7 +60,9 @@ class SlideProcessor:
         temporal_boost: float = 0.05,
         min_score_threshold: float = 1.5,
         switch_multiplier: float = 1.1,
-        use_embeddings: bool = True
+        use_embeddings: bool = True,
+        export_extracted_content: bool = False,
+        export_format: str = "json"
     ):
         """
         Initialize slide processor with matching parameters.
@@ -73,11 +76,15 @@ class SlideProcessor:
             min_score_threshold: Minimum score to return a match (default: 1.5)
             switch_multiplier: Threshold multiplier for switching slides (default: 1.1)
             use_embeddings: Whether to generate and use embeddings (default: True)
+            export_extracted_content: Whether to export extracted content to file (default: False)
+            export_format: Export format - "json" or "text" (default: "json")
         """
         self.pdf_extractor = PDFExtractor()  # Initialize PDF extractor
         self.nlp = JapaneseNLP()
         self.keyword_indexer = KeywordIndexer()
         self.use_embeddings = use_embeddings
+        self.export_extracted_content = export_extracted_content
+        self.export_format = export_format
         
         if use_embeddings:
             self.embedding_gen = EmbeddingGenerator()
@@ -103,6 +110,7 @@ class SlideProcessor:
         self.slides: List[SlideContent] = []
         self.slide_texts: List[str] = []
         self.slide_keywords: Dict[int, List[str]] = {}
+        self.inverted_index: Dict[str, List[int]] = {}
         
         logger.info(
             f"Initialized SlideProcessor: "
@@ -136,6 +144,20 @@ class SlideProcessor:
                 raise PDFProcessingError("No slides extracted from PDF")
             
             logger.info(f"Extracted {len(self.slides)} slides from PDF")
+            
+            # Export extracted content to file if enabled
+            if self.export_extracted_content:
+                try:
+                    pdf_path_obj = Path(pdf_path)
+                    output_path = pdf_path_obj.parent / f"{pdf_path_obj.stem}_extracted_content.{self.export_format}"
+                    self.pdf_extractor.export_to_file(
+                        self.slides,
+                        str(output_path),
+                        format=self.export_format
+                    )
+                    logger.info(f"Exported extracted content to: {output_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to export extracted content: {e}")
             
             # Process each slide
             slide_keywords_list = []
@@ -281,8 +303,11 @@ class SlideProcessor:
                 
                 self.slide_texts.append(text)
                 
-                # Extract keywords
-                keywords = self.nlp.extract_keywords(text)
+                # Check if text is from OCR (OCR blocks have font_name="OCR")
+                is_ocr_text = any(block.font_name == "OCR" for block in slide.text_blocks)
+                
+                # Extract keywords (with OCR-aware processing)
+                keywords = self.nlp.extract_keywords(text, is_ocr_text=is_ocr_text)
                 self.slide_keywords[slide.page_number] = keywords  # Fixed: page -> page_number
                 slide_keywords_list.append(keywords)
                 slide_ids.append(slide.page_number)  # Fixed: page -> page_number
@@ -340,11 +365,16 @@ class SlideProcessor:
                 switch_multiplier=self.switch_multiplier
             )
             
-            return {
+            stats = {
                 'slide_count': len(self.slides),
                 'keywords_count': len(inverted_index),
                 'has_embeddings': has_embeddings
             }
+            
+            # Store inverted_index for export
+            self.inverted_index = inverted_index
+            
+            return stats
             
         except Exception as e:
             logger.error(f"PDF processing failed: {e}")
@@ -372,8 +402,8 @@ class SlideProcessor:
             raise MatchingError("Slide processor not initialized. Call process_pdf() first.")
         
         try:
-            # Extract keywords from transcript
-            keywords = self.nlp.extract_keywords(text)
+            # Extract keywords from transcript (not OCR, so is_ocr_text=False)
+            keywords = self.nlp.extract_keywords(text, is_ocr_text=False)
             readings = [self.nlp.get_reading(text)]
             
             # Run three-pass matching
@@ -535,6 +565,220 @@ class SlideProcessor:
         logger.info(f"Generated timeline with {len(timeline)} entries")
         
         return timeline
+    
+    def export_full_results(self, output_path: str, format: str = "json") -> str:
+        """
+        Export full processing results to file.
+        
+        Includes:
+        - Extracted slides content
+        - Keywords for each slide
+        - Slide texts
+        - Statistics
+        - Embeddings info (if available)
+        - Processing metadata
+        
+        Args:
+            output_path: Path to output file
+            format: Export format - "json" or "text" (default: "json")
+            
+        Returns:
+            Path to the exported file
+            
+        Raises:
+            MatchingError: If processor not initialized
+        """
+        if not self.slides:
+            raise MatchingError("No slides processed. Call process_pdf() first.")
+        
+        if format.lower() == "json":
+            return self._export_full_results_json(output_path)
+        elif format.lower() == "text":
+            return self._export_full_results_text(output_path)
+        else:
+            raise ValueError(f"Unsupported format: {format}. Use 'json' or 'text'")
+    
+    def _export_full_results_json(self, output_path: str) -> str:
+        """Export full results to JSON file."""
+        output_data = {
+            "processing_statistics": {
+                "slide_count": len(self.slides),
+                "keywords_count": len(self.inverted_index),
+                "has_embeddings": self.use_embeddings and self.embedding_gen is not None,
+                "total_keywords": sum(len(kw) for kw in self.slide_keywords.values()),
+                "unique_keywords": len(self.inverted_index)
+            },
+            "processing_config": {
+                "use_embeddings": self.use_embeddings,
+                "exact_weight": self.exact_weight,
+                "fuzzy_weight": self.fuzzy_weight,
+                "semantic_weight": self.semantic_weight,
+                "title_boost": self.title_boost,
+                "temporal_boost": self.temporal_boost,
+                "min_score_threshold": self.min_score_threshold,
+                "switch_multiplier": self.switch_multiplier
+            },
+            "slides": []
+        }
+        
+        for i, slide in enumerate(self.slides):
+            slide_id = slide.page_number
+            slide_data = {
+                "slide_id": slide_id,
+                "page_number": slide.page_number,
+                "title": slide.title,
+                "headings": slide.headings,
+                "bullets": slide.bullets,
+                "body": slide.body,
+                "all_text": slide.all_text,
+                "summary": slide.summary,  # Semantic summary processed by NLP
+                "slide_text": self.slide_texts[i] if i < len(self.slide_texts) else "",
+                "keywords": self.slide_keywords.get(slide_id, []),
+                "keyword_count": len(self.slide_keywords.get(slide_id, [])),
+                "text_blocks": [
+                    {
+                        "text": block.text,
+                        "block_type": block.block_type,
+                        "font_size": block.font_size,
+                        "font_name": block.font_name,
+                        "position": block.position,
+                        "bbox": block.bbox
+                    }
+                    for block in slide.text_blocks
+                ]
+            }
+            output_data["slides"].append(slide_data)
+        
+        # Add keyword index summary
+        output_data["keyword_index_summary"] = {
+            "total_unique_keywords": len(self.inverted_index),
+            "top_keywords": sorted(
+                [(kw, len(slide_ids)) for kw, slide_ids in self.inverted_index.items()],
+                key=lambda x: x[1],
+                reverse=True
+            )[:50]  # Top 50 keywords
+        }
+        
+        # Add embeddings info if available
+        if self.use_embeddings and self.embedding_gen:
+            output_data["embeddings_info"] = {
+                "model_name": self.embedding_gen.model_name,
+                "embedding_dimension": self.embedding_gen.embedding_dim,
+                "has_faiss_index": self.embedding_gen.faiss_index is not None,
+                "total_embeddings": len(self.slide_texts)
+            }
+        
+        # Generate global summary (all_summary) using TextSummarizer
+        summarizer = TextSummarizer()
+        slides_data_for_summary = [
+            {
+                "page_number": slide.page_number,
+                "summary": slide.summary
+            }
+            for slide in self.slides
+        ]
+        output_data["all_summary"] = summarizer.generate_global_summary(slides_data_for_summary)
+        
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(output_data, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"Exported full processing results to JSON: {output_path}")
+        return output_path
+    
+    def _export_full_results_text(self, output_path: str) -> str:
+        """Export full results to human-readable text file."""
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write("=" * 80 + "\n")
+            f.write("PDF PROCESSING RESULTS - FULL REPORT\n")
+            f.write("=" * 80 + "\n\n")
+            
+            # Statistics
+            f.write("PROCESSING STATISTICS\n")
+            f.write("-" * 80 + "\n")
+            f.write(f"Total Slides: {len(self.slides)}\n")
+            f.write(f"Unique Keywords: {len(self.inverted_index)}\n")
+            f.write(f"Total Keywords (all slides): {sum(len(kw) for kw in self.slide_keywords.values())}\n")
+            f.write(f"Has Embeddings: {self.use_embeddings and self.embedding_gen is not None}\n")
+            f.write("\n")
+            
+            # Processing config
+            f.write("PROCESSING CONFIGURATION\n")
+            f.write("-" * 80 + "\n")
+            f.write(f"Use Embeddings: {self.use_embeddings}\n")
+            f.write(f"Exact Weight: {self.exact_weight}\n")
+            f.write(f"Fuzzy Weight: {self.fuzzy_weight}\n")
+            f.write(f"Semantic Weight: {self.semantic_weight}\n")
+            f.write(f"Title Boost: {self.title_boost}\n")
+            f.write(f"Temporal Boost: {self.temporal_boost}\n")
+            f.write(f"Min Score Threshold: {self.min_score_threshold}\n")
+            f.write(f"Switch Multiplier: {self.switch_multiplier}\n")
+            f.write("\n")
+            
+            # Embeddings info
+            if self.use_embeddings and self.embedding_gen:
+                f.write("EMBEDDINGS INFORMATION\n")
+                f.write("-" * 80 + "\n")
+                f.write(f"Model: {self.embedding_gen.model_name}\n")
+                f.write(f"Dimension: {self.embedding_gen.embedding_dim}\n")
+                f.write(f"FAISS Index: {self.embedding_gen.faiss_index is not None}\n")
+                f.write(f"Total Embeddings: {len(self.slide_texts)}\n")
+                f.write("\n")
+            
+            # Top keywords
+            f.write("TOP KEYWORDS (by frequency)\n")
+            f.write("-" * 80 + "\n")
+            top_keywords = sorted(
+                [(kw, len(slide_ids)) for kw, slide_ids in self.inverted_index.items()],
+                key=lambda x: x[1],
+                reverse=True
+            )[:30]
+            for kw, count in top_keywords:
+                f.write(f"  {kw}: appears in {count} slide(s)\n")
+            f.write("\n")
+            
+            # Slides detail
+            f.write("=" * 80 + "\n")
+            f.write("SLIDES DETAIL\n")
+            f.write("=" * 80 + "\n\n")
+            
+            for i, slide in enumerate(self.slides):
+                slide_id = slide.page_number
+                f.write(f"\n{'=' * 80}\n")
+                f.write(f"SLIDE {slide_id}\n")
+                f.write(f"{'=' * 80}\n\n")
+                
+                if slide.title:
+                    f.write(f"TITLE:\n{slide.title}\n\n")
+                
+                if slide.headings:
+                    f.write("HEADINGS:\n")
+                    for heading in slide.headings:
+                        f.write(f"  • {heading}\n")
+                    f.write("\n")
+                
+                if slide.bullets:
+                    f.write("BULLETS:\n")
+                    for bullet in slide.bullets:
+                        f.write(f"  - {bullet}\n")
+                    f.write("\n")
+                
+                if slide.body:
+                    f.write("BODY TEXT:\n")
+                    for body_text in slide.body:
+                        f.write(f"  {body_text}\n")
+                    f.write("\n")
+                
+                f.write("FULL TEXT:\n")
+                slide_text = self.slide_texts[i] if i < len(self.slide_texts) else slide.all_text
+                f.write(f"{slide_text}\n\n")
+                
+                keywords = self.slide_keywords.get(slide_id, [])
+                if keywords:
+                    f.write(f"KEYWORDS ({len(keywords)}):\n")
+                    f.write(f"  {', '.join(keywords)}\n\n")
+        
+        logger.info(f"Exported full processing results to text file: {output_path}")
+        return output_path
     
     def get_slide_info(self, slide_id: int) -> Optional[Dict]:
         """

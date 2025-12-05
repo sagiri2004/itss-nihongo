@@ -19,6 +19,8 @@ import logging
 import time
 import pyaudio
 
+logger = logging.getLogger(__name__)
+
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -63,6 +65,8 @@ if 'audio_thread' not in st.session_state:
     st.session_state.audio_thread = None
 if 'result_queue' not in st.session_state:
     st.session_state.result_queue = queue.Queue()
+if 'export_file_path' not in st.session_state:
+    st.session_state.export_file_path = None
 
 
 # Sidebar - Configuration
@@ -151,11 +155,31 @@ if not st.session_state.slides_processed:
                         status_text.text("🔍 Extracting keywords and building index...")
                         progress_bar.progress(80)
                         
-                        slide_processor = SlideProcessor()
+                        slide_processor = SlideProcessor(use_embeddings=True)
                         result = slide_processor.process_pdf(pdf_path)
                         
                         st.session_state.slide_processor = slide_processor
                         st.session_state.slide_count = result.get('slide_count', 0)
+                        
+                        # Export full results to file in result folder
+                        status_text.text("💾 Exporting results...")
+                        progress_bar.progress(90)
+                        
+                        try:
+                            # Create result folder if not exists
+                            result_dir = Path(__file__).parent / "result"
+                            result_dir.mkdir(exist_ok=True)
+                            
+                            # Export file
+                            export_filename = f"{Path(pdf_file.name).stem}_processing_results.json"
+                            export_path = result_dir / export_filename
+                            slide_processor.export_full_results(str(export_path), format="json")
+                            
+                            st.session_state.export_file_path = str(export_path)
+                            logger.info(f"Exported results to: {export_path}")
+                        except Exception as e:
+                            logger.error(f"Failed to export results: {e}", exc_info=True)
+                            st.session_state.export_file_path = None
                         
                         progress_bar.progress(100)
                         status_text.text("✅ Slides processed!")
@@ -166,8 +190,13 @@ if not st.session_state.slides_processed:
                         🎉 Slides processed successfully!
                         - Total slides: {result.get('slide_count', 0)}
                         - Keywords extracted: {result.get('keywords_count', 0)}
+                        - Embeddings: {'Yes' if result.get('has_embeddings') else 'No'}
                         - Ready for real-time recording!
                         """)
+                        
+                        # Show file path
+                        if st.session_state.get('export_file_path'):
+                            st.info(f"📁 Results exported to: `{st.session_state.export_file_path}`")
                         
                         st.rerun()
                         
