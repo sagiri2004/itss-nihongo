@@ -33,6 +33,7 @@ def _ensure_credentials_path() -> Optional[str]:
 _ensure_credentials_path()
 
 from ...slide_processing import PDFProcessingError, SlideProcessor
+from ...pdf_processing.text_summarizer import TextSummarizer
 
 router = APIRouter()
 
@@ -73,6 +74,7 @@ class SlideProcessingResponse(BaseModel):
     slide_count: int = Field(..., alias="slide_count")
     keywords_count: int = Field(..., alias="keywords_count")
     has_embeddings: bool = Field(..., alias="has_embeddings")
+    all_summary: str = Field("", alias="all_summary")  # Global summary of all slides
     slides: List[SlideDetails]
 
     class Config:
@@ -149,6 +151,23 @@ def _build_slide_payload(processor: SlideProcessor) -> Tuple[List[Dict[str, Any]
     return slides_payload, len(unique_keywords)
 
 
+def _generate_all_summary(processor: SlideProcessor) -> str:
+    """Generate global summary for all slides using TextSummarizer."""
+    try:
+        summarizer = TextSummarizer()
+        slides_data_for_summary = [
+            {
+                "page_number": slide.page_number,
+                "summary": slide.summary
+            }
+            for slide in processor.slides
+        ]
+        return summarizer.generate_global_summary(slides_data_for_summary)
+    except Exception:
+        # Return empty string if summarization fails
+        return ""
+
+
 @router.post("/upload")
 async def upload_slide(
     file: UploadFile = File(..., description="PDF slide deck to process"),
@@ -170,6 +189,7 @@ async def upload_slide(
         processor = SlideProcessor(use_embeddings=use_embeddings)
         stats = processor.process_pdf(str(temp_path))
         slides_payload, unique_keyword_count = _build_slide_payload(processor)
+        all_summary = _generate_all_summary(processor)
 
         response: Dict[str, Any] = {
             "filename": file.filename,
@@ -179,6 +199,7 @@ async def upload_slide(
             "keywords_count": stats.get("keywords_count", unique_keyword_count),
             "slide_count": stats.get("slide_count", len(slides_payload)),
             "has_embeddings": bool(stats.get("has_embeddings", False)),
+            "all_summary": all_summary,
         }
 
         return response
@@ -206,6 +227,7 @@ async def process_slide(request: SlideProcessingRequest) -> SlideProcessingRespo
         processor = SlideProcessor(use_embeddings=request.use_embeddings)
         stats = processor.process_pdf(str(temp_path))
         slides_payload, unique_keyword_count = _build_slide_payload(processor)
+        all_summary = _generate_all_summary(processor)
 
         slide_models = [
             SlideDetails(
@@ -227,6 +249,7 @@ async def process_slide(request: SlideProcessingRequest) -> SlideProcessingRespo
             slide_count=stats.get("slide_count", len(slides_payload)),
             keywords_count=stats.get("keywords_count", unique_keyword_count),
             has_embeddings=bool(stats.get("has_embeddings", False)),
+            all_summary=all_summary,
             slides=slide_models,
         )
 
