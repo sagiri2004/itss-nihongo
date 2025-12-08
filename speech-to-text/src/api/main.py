@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from .routers import slides, transcription
+from .routers import slides, transcription, analytics
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -23,6 +23,7 @@ def create_app() -> FastAPI:
 
     app.include_router(slides.router, prefix="/slides", tags=["slides"])
     app.include_router(transcription.router, prefix="/ws", tags=["speech-to-text"])
+    app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 
     static_dir = BASE_DIR / "static"
     if static_dir.exists():

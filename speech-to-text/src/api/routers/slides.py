@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -11,6 +12,8 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from google.api_core import exceptions as gcs_exceptions
 from google.cloud import storage
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 # Default service account path (same as transcription router)
 DEFAULT_SERVICE_ACCOUNT = Path(__file__).resolve().parents[4] / "speech-processing-prod-9ffbefa55e2c.json"
@@ -33,6 +36,7 @@ def _ensure_credentials_path() -> Optional[str]:
 _ensure_credentials_path()
 
 from ...slide_processing import PDFProcessingError, SlideProcessor
+from ...pdf_processing.text_summarizer import TextSummarizer
 
 router = APIRouter()
 
@@ -73,6 +77,7 @@ class SlideProcessingResponse(BaseModel):
     slide_count: int = Field(..., alias="slide_count")
     keywords_count: int = Field(..., alias="keywords_count")
     has_embeddings: bool = Field(..., alias="has_embeddings")
+    all_summary: str = Field("", alias="all_summary")  # Global summary of all slides
     slides: List[SlideDetails]
 
     class Config:
@@ -149,6 +154,49 @@ def _build_slide_payload(processor: SlideProcessor) -> Tuple[List[Dict[str, Any]
     return slides_payload, len(unique_keywords)
 
 
+def _generate_all_summary(processor: SlideProcessor) -> str:
+    """
+    Generate global summary for all slides using TextSummarizer.
+    
+    Raises:
+        RuntimeError: If TextSummarizer initialization fails (consistent with PDFExtractor behavior).
+        This ensures dependency issues are visible rather than silently masked.
+    """
+    try:
+        summarizer = TextSummarizer()
+        slides_data_for_summary = [
+            {
+                "page_number": slide.page_number,
+                "summary": slide.summary
+            }
+            for slide in processor.slides
+        ]
+        return summarizer.generate_global_summary(slides_data_for_summary)
+    except RuntimeError as e:
+        # RuntimeError from TextSummarizer indicates missing dependencies (ginza, ja-ginza)
+        # This is the same error that would fail PDFExtractor, so we should propagate it
+        # for consistency and visibility
+        logger.error(
+            "Failed to generate all_summary: TextSummarizer initialization failed. "
+            "This indicates missing NLP dependencies (ginza, ja-ginza). "
+            "Error: %s",
+            str(e)
+        )
+        raise
+    except Exception as e:
+        # Other exceptions (e.g., processing errors) should also be logged and raised
+        # to avoid masking real problems
+        logger.error(
+            "Failed to generate all_summary: Unexpected error during summarization. "
+            "Error: %s",
+            str(e),
+            exc_info=True
+        )
+        raise RuntimeError(
+            f"Failed to generate global summary: {str(e)}"
+        ) from e
+
+
 @router.post("/upload")
 async def upload_slide(
     file: UploadFile = File(..., description="PDF slide deck to process"),
@@ -170,6 +218,7 @@ async def upload_slide(
         processor = SlideProcessor(use_embeddings=use_embeddings)
         stats = processor.process_pdf(str(temp_path))
         slides_payload, unique_keyword_count = _build_slide_payload(processor)
+        all_summary = _generate_all_summary(processor)
 
         response: Dict[str, Any] = {
             "filename": file.filename,
@@ -179,6 +228,7 @@ async def upload_slide(
             "keywords_count": stats.get("keywords_count", unique_keyword_count),
             "slide_count": stats.get("slide_count", len(slides_payload)),
             "has_embeddings": bool(stats.get("has_embeddings", False)),
+            "all_summary": all_summary,
         }
 
         return response
@@ -206,6 +256,7 @@ async def process_slide(request: SlideProcessingRequest) -> SlideProcessingRespo
         processor = SlideProcessor(use_embeddings=request.use_embeddings)
         stats = processor.process_pdf(str(temp_path))
         slides_payload, unique_keyword_count = _build_slide_payload(processor)
+        all_summary = _generate_all_summary(processor)
 
         slide_models = [
             SlideDetails(
@@ -227,6 +278,7 @@ async def process_slide(request: SlideProcessingRequest) -> SlideProcessingRespo
             slide_count=stats.get("slide_count", len(slides_payload)),
             keywords_count=stats.get("keywords_count", unique_keyword_count),
             has_embeddings=bool(stats.get("has_embeddings", False)),
+            all_summary=all_summary,
             slides=slide_models,
         )
 

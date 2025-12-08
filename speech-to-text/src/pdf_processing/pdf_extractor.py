@@ -247,17 +247,17 @@ class PDFExtractor:
                             logger.debug(f"Filtered header/footer: {text[:50]}")
                             continue
                         
-                        text_block = TextBlock(
-                            text=text,
-                            page_number=page_number,
+                            text_block = TextBlock(
+                                text=text,
+                                page_number=page_number,
                             bbox=bbox,
-                            font_size=span["size"],
-                            font_name=span["font"],
-                            block_type="unknown",  # Will be classified later
-                            position=block_idx
-                        )
-                        text_blocks.append(text_block)
-        
+                                font_size=span["size"],
+                                font_name=span["font"],
+                                block_type="unknown",  # Will be classified later
+                                position=block_idx
+                            )
+                            text_blocks.append(text_block)
+                            
         # Coordinate-based sorting (Priority 1)
         if self.enable_coordinate_sorting:
             text_blocks = self._sort_text_blocks_by_coordinates(text_blocks)
@@ -486,7 +486,7 @@ class PDFExtractor:
         # This prevents OCR on short but clean title slides
         if char_count < 50 and valid_ratio < 0.5:
             return True
-        
+            
         # Default: Trust native text (don't trigger OCR)
         return False
     
