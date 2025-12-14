@@ -10,7 +10,12 @@ public class SlideDeckSummaryResponse {
     Long id;
     String gcpAssetId;
     String originalName;
+    String processedFileName;
+    String presentationId;
     Integer pageCount;
+    Integer keywordsCount;
+    Boolean hasEmbeddings;
+    String contentSummary;
     AssetStatus uploadStatus;
 }
 

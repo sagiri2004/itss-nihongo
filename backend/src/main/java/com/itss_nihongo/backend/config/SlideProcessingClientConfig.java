@@ -13,8 +13,8 @@ public class SlideProcessingClientConfig {
     @Bean
     public RestTemplate slideProcessingRestTemplate(SlideProcessingProperties properties) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(properties.getTimeoutMs());
-        factory.setReadTimeout(properties.getTimeoutMs());
+        factory.setConnectTimeout(properties.resolveConnectTimeoutMs());
+        factory.setReadTimeout(properties.resolveReadTimeoutMs());
         return new RestTemplate(factory);
     }
 }

@@ -17,6 +17,13 @@ const SlideUploadPage = () => {
   const [recentUpload, setRecentUpload] = useState<SlideDeck | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
+  const formatBoolean = (value: boolean | null | undefined) => {
+    if (value == null) {
+      return t('common.boolean.unknown')
+    }
+    return value ? t('common.boolean.yes') : t('common.boolean.no')
+  }
+
   useEffect(() => {
     const paramLectureId = searchParams.get('lectureId')
     if (paramLectureId) {
@@ -130,10 +137,22 @@ const SlideUploadPage = () => {
               <span>{t('slides.status.lectureId')}</span>
               <strong>{recentUpload.lectureId}</strong>
             </li>
+            {recentUpload.presentationId && (
+              <li>
+                <span>{t('slides.status.presentationId')}</span>
+                <strong>{recentUpload.presentationId}</strong>
+              </li>
+            )}
             <li>
               <span>{t('slides.status.originalName')}</span>
               <strong>{recentUpload.originalName ?? '不明'}</strong>
             </li>
+            {recentUpload.processedFileName && (
+              <li>
+                <span>{t('slides.status.processedName')}</span>
+                <strong>{recentUpload.processedFileName}</strong>
+              </li>
+            )}
             <li>
               <span>{t('slides.status.gcpAssetId')}</span>
               <strong>{recentUpload.gcpAssetId}</strong>
@@ -141,6 +160,22 @@ const SlideUploadPage = () => {
             <li>
               <span>{t('slides.status.uploadStatus')}</span>
               <strong>{recentUpload.uploadStatus}</strong>
+            </li>
+            {recentUpload.pageCount != null && (
+              <li>
+                <span>{t('slides.status.pageCount')}</span>
+                <strong>{recentUpload.pageCount}</strong>
+              </li>
+            )}
+            {recentUpload.keywordsCount != null && (
+              <li>
+                <span>{t('slides.status.keywordsCount')}</span>
+                <strong>{recentUpload.keywordsCount}</strong>
+              </li>
+            )}
+            <li>
+              <span>{t('slides.status.hasEmbeddings')}</span>
+              <strong>{formatBoolean(recentUpload.hasEmbeddings)}</strong>
             </li>
           </ul>
         </section>

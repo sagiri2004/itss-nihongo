@@ -9,14 +9,23 @@ export const lectureService = {
       token,
     })
   },
-  listLectures(token: string, limit?: number) {
+  listLectures(token: string, limit?: number, status?: string) {
     const searchParams = new URLSearchParams()
     if (limit && limit > 0) {
       searchParams.set('limit', String(limit))
     }
+    if (status) {
+      searchParams.set('status', status)
+    }
     const query = searchParams.toString()
     const endpoint = query ? `/api/lectures?${query}` : '/api/lectures'
     return httpClient<LectureSummary[]>(endpoint, { token })
+  },
+  deleteLecture(lectureId: number, token: string) {
+    return httpClient<void>(`/api/lectures/${lectureId}`, {
+      method: 'DELETE',
+      token,
+    })
   },
   getLectureDetail(lectureId: number, token: string) {
     return httpClient<LectureDetail>(`/api/lectures/${lectureId}`, { token })

@@ -51,12 +51,29 @@ public class SlideDeckEntity {
     @Column(name = "original_name", length = 255)
     private String originalName;
 
+    @Column(name = "processed_file_name", length = 255)
+    private String processedFileName;
+
+    @Column(name = "presentation_id", length = 128)
+    private String presentationId;
+
     @Column(name = "page_count", nullable = false)
     @Builder.Default
     private Integer pageCount = 0;
 
-    @Column(name = "content_summary", columnDefinition = "TEXT")
+    @Column(name = "content_summary", columnDefinition = "LONGTEXT")
     private String contentSummary;
+
+    @Column(name = "all_summary", columnDefinition = "LONGTEXT")
+    private String allSummary;
+
+    @Column(name = "keywords_count")
+    @Builder.Default
+    private Integer keywordsCount = 0;
+
+    @Column(name = "has_embeddings")
+    @Builder.Default
+    private Boolean hasEmbeddings = Boolean.FALSE;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "upload_status", nullable = false, length = 32)

@@ -335,8 +335,15 @@ class AudioChunkHandler:
             # First, flush any accumulated data
             ready_chunks = self._flush_accumulator(force=False)
             
-            # Add current chunk
+            # Add current chunk - IMPORTANT: Even if exactly MIN_CHUNK_SIZE, send it immediately
+            # Don't buffer it - we need chunks in queue ASAP for Google API
             ready_chunks.append(chunk)
+            
+            logger.debug(
+                f"Processed normal chunk: {len(chunk)} bytes, "
+                f"ready_chunks={len(ready_chunks)}, "
+                f"accumulator_size={len(self.accumulator)}"
+            )
             
             # Update metrics
             self.metrics.valid_chunks += 1
@@ -401,11 +408,4 @@ class AudioChunkHandler:
         self.wav_header_removed = False
         self.reset_metrics()
         logger.debug("Audio chunk handler reset")
-    
-    def reset(self):
-        """Reset handler state (clear accumulator and buffer)."""
-        self.accumulator.clear()
-        self.buffer.clear()
-        self.wav_header_removed = False
-        self.reset_metrics()
-        logger.debug("Audio chunk handler reset")
+

@@ -55,7 +55,7 @@ public class LectureEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     @Builder.Default
-    private LectureStatus status = LectureStatus.DRAFT;
+    private LectureStatus status = LectureStatus.INFO_INPUT;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;

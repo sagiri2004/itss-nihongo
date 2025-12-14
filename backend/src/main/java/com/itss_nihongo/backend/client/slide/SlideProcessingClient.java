@@ -1,5 +1,7 @@
 package com.itss_nihongo.backend.client.slide;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.itss_nihongo.backend.config.SlideProcessingProperties;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -16,6 +18,7 @@ import org.springframework.web.client.RestTemplate;
 public class SlideProcessingClient {
 
     private static final Logger log = LoggerFactory.getLogger(SlideProcessingClient.class);
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final RestTemplate restTemplate;
     private final SlideProcessingProperties properties;
@@ -39,6 +42,14 @@ public class SlideProcessingClient {
         }
 
         SlideProcessingRequestPayload payload = new SlideProcessingRequestPayload(lectureId, gcsUri, originalName);
+        if (log.isDebugEnabled()) {
+            try {
+                String payloadJson = OBJECT_MAPPER.writeValueAsString(payload);
+                log.debug("Calling slide processing with payload: {}", payloadJson);
+            } catch (JsonProcessingException ex) {
+                log.debug("Calling slide processing with payload (failed to serialize): {}", payload, ex);
+            }
+        }
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<SlideProcessingRequestPayload> entity = new HttpEntity<>(payload, headers);

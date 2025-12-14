@@ -28,13 +28,17 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public UserEntity registerUser(String username, String rawPassword, Set<Role> roles) {
+    public UserEntity registerUser(String username, String rawPassword, String email, Set<Role> roles) {
         if (userRepository.existsByUsername(username)) {
             throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        }
+        if (userRepository.existsByEmail(email)) {
+            throw new AppException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
         UserEntity userEntity = new UserEntity();
         userEntity.setUsername(username);
         userEntity.setPassword(passwordEncoder.encode(rawPassword));
+        userEntity.setEmail(email);
         userEntity.setRoles(new HashSet<>(roles));
         return userRepository.save(userEntity);
     }
@@ -42,6 +46,11 @@ public class UserServiceImpl implements UserService {
     @Override
     public Optional<UserEntity> findByUsername(String username) {
         return userRepository.findByUsername(username);
+    }
+
+    @Override
+    public Optional<UserEntity> findByEmail(String email) {
+        return userRepository.findByEmail(email);
     }
 
     @Override

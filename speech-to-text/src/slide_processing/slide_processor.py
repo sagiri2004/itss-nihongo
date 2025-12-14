@@ -306,7 +306,7 @@ class SlideProcessor:
                 # Check if text is from OCR (OCR blocks have font_name="OCR")
                 is_ocr_text = any(block.font_name == "OCR" for block in slide.text_blocks)
                 
-                # Extract keywords (with OCR-aware processing)
+                # Extract keywords (with OCR-aware processing) - per page
                 keywords = self.nlp.extract_keywords(text, is_ocr_text=is_ocr_text)
                 self.slide_keywords[slide.page_number] = keywords  # Fixed: page -> page_number
                 slide_keywords_list.append(keywords)
@@ -317,9 +317,77 @@ class SlideProcessor:
                     f"{len(text)} chars"
                 )
             
-            # Build keyword index
+            # Build keyword index (for TF-IDF calculation)
+            # First pass: build index with all keywords to calculate TF-IDF scores
             inverted_index = self.keyword_indexer.build_index(
                 slide_keywords_list,
+                slide_ids
+            )
+            
+            # Filter keywords to keep only important ones (using TF-IDF scores)
+            # This ensures we only keep keywords that are significant and relevant
+            # Keywords are filtered per page based on their importance in the document
+            filtered_slide_keywords = {}
+            for slide_id, keywords in zip(slide_ids, slide_keywords_list):
+                if not keywords:
+                    filtered_slide_keywords[slide_id] = []
+                    continue
+                
+                # Calculate TF-IDF scores for keywords in this slide
+                # Use the index we just built to get accurate TF-IDF scores
+                keyword_scores = []
+                keyword_counts = {}
+                total_keywords = len(keywords)
+                
+                # Count frequency in this slide
+                for kw in keywords:
+                    keyword_counts[kw] = keyword_counts.get(kw, 0) + 1
+                
+                # Calculate TF-IDF for each unique keyword in this slide
+                for kw, count in keyword_counts.items():
+                    # Get TF-IDF from index (lookup returns list of (slide_id, position, tfidf))
+                    matches = self.keyword_indexer.lookup(kw)
+                    # Find matches for this slide
+                    slide_matches = [m for m in matches if m[0] == slide_id]
+                    if slide_matches:
+                        # Use the highest TF-IDF score for this keyword in this slide
+                        max_tfidf = max(m[2] for m in slide_matches)
+                        keyword_scores.append((kw, max_tfidf))
+                    else:
+                        # Fallback: calculate manually
+                        tf = count / total_keywords
+                        idf = self.keyword_indexer._calculate_idf(kw)
+                        keyword_scores.append((kw, tf * idf))
+                
+                # Sort by TF-IDF score (descending)
+                keyword_scores.sort(key=lambda x: x[1], reverse=True)
+                
+                # Keep top keywords: at least top 10, but filter out very low scores (< 0.01)
+                # This ensures we keep important keywords while removing noise
+                important_keywords = [
+                    kw for kw, score in keyword_scores 
+                    if score > 0.01
+                ]
+                
+                # If we filtered too aggressively, keep at least top 10-15 keywords
+                if len(important_keywords) < 10:
+                    important_keywords = [kw for kw, _ in keyword_scores[:15]]
+                elif len(important_keywords) > 30:
+                    # Also limit to top 30 to avoid too many keywords
+                    important_keywords = important_keywords[:30]
+                
+                filtered_slide_keywords[slide_id] = important_keywords
+                logger.debug(
+                    f"Slide {slide_id}: Filtered {len(keywords)} -> {len(important_keywords)} important keywords"
+                )
+            
+            # Update slide_keywords with filtered results
+            self.slide_keywords = filtered_slide_keywords
+            
+            # Rebuild index with filtered keywords for final matching
+            filtered_keywords_list = [filtered_slide_keywords.get(sid, []) for sid in slide_ids]
+            inverted_index = self.keyword_indexer.build_index(
+                filtered_keywords_list,
                 slide_ids
             )
             

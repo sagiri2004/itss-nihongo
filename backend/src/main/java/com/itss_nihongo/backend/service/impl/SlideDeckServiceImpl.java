@@ -15,6 +15,9 @@ import com.itss_nihongo.backend.entity.SlideDeckEntity;
 import com.itss_nihongo.backend.entity.SlidePageEntity;
 import com.itss_nihongo.backend.exception.AppException;
 import com.itss_nihongo.backend.exception.ErrorCode;
+import com.itss_nihongo.backend.entity.HistoryEntity;
+import com.itss_nihongo.backend.entity.LectureStatus;
+import com.itss_nihongo.backend.repository.HistoryRepository;
 import com.itss_nihongo.backend.repository.LectureRepository;
 import com.itss_nihongo.backend.repository.SlideDeckRepository;
 import com.itss_nihongo.backend.service.SlideDeckService;
@@ -23,8 +26,10 @@ import java.io.InputStream;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,17 +49,23 @@ public class SlideDeckServiceImpl implements SlideDeckService {
     private final Storage storage;
     private final GcpStorageProperties properties;
     private final SlideProcessingClient slideProcessingClient;
+    private final com.itss_nihongo.backend.service.SlideProcessingNotificationService notificationService;
+    private final HistoryRepository historyRepository;
 
     public SlideDeckServiceImpl(LectureRepository lectureRepository,
                                 SlideDeckRepository slideDeckRepository,
                                 Storage storage,
                                 GcpStorageProperties properties,
-                                SlideProcessingClient slideProcessingClient) {
+                                SlideProcessingClient slideProcessingClient,
+                                com.itss_nihongo.backend.service.SlideProcessingNotificationService notificationService,
+                                HistoryRepository historyRepository) {
         this.lectureRepository = lectureRepository;
         this.slideDeckRepository = slideDeckRepository;
         this.storage = storage;
         this.properties = properties;
         this.slideProcessingClient = slideProcessingClient;
+        this.notificationService = notificationService;
+        this.historyRepository = historyRepository;
     }
 
     @Override
@@ -82,9 +93,65 @@ public class SlideDeckServiceImpl implements SlideDeckService {
         SlideDeckEntity saved = slideDeckRepository.save(slideDeck);
         lecture.setSlideDeck(saved);
 
+        // Update lecture status to SLIDE_UPLOAD
+        LectureStatus oldStatus = lecture.getStatus();
+        lecture.setStatus(LectureStatus.SLIDE_UPLOAD);
+        lectureRepository.save(lecture);
+
+        // Create history record for status change
+        if (oldStatus != LectureStatus.SLIDE_UPLOAD) {
+            HistoryEntity history = HistoryEntity.builder()
+                    .user(lecture.getUser())
+                    .lecture(lecture)
+                    .action(HistoryEntity.HistoryAction.UPDATED)
+                    .description(String.format("Uploaded slide deck. Status changed from %s to %s", oldStatus, LectureStatus.SLIDE_UPLOAD))
+                    .build();
+            historyRepository.save(history);
+        }
+
         triggerSlideProcessing(lecture, saved);
 
         return toResponse(saved);
+    }
+
+    @Override
+    public SlideDeckResponse reprocessSlideDeck(Long lectureId) {
+        LectureEntity lecture = lectureRepository.findById(lectureId)
+                .orElseThrow(() -> new AppException(ErrorCode.LECTURE_NOT_FOUND));
+
+        SlideDeckEntity slideDeck = lecture.getSlideDeck();
+        if (slideDeck == null || !StringUtils.hasText(slideDeck.getGcpAssetId())) {
+            throw new AppException(ErrorCode.INVALID_FILE_UPLOAD, "Slide deck is not available for re-processing");
+        }
+
+        log.info("Re-processing slide deck {} for lecture {}", slideDeck.getId(), lectureId);
+        triggerSlideProcessing(lecture, slideDeck);
+        slideDeckRepository.flush();
+
+        return toResponse(slideDeck);
+    }
+
+    @Override
+    public void reprocessAllSlideDecks() {
+        List<SlideDeckEntity> slideDecks = slideDeckRepository.findAll();
+        for (SlideDeckEntity slideDeck : slideDecks) {
+            LectureEntity lecture = slideDeck.getLecture();
+            if (lecture == null) {
+                log.warn("Skipping slide deck {} because lecture is not available", slideDeck.getId());
+                continue;
+            }
+            if (!StringUtils.hasText(slideDeck.getGcpAssetId())) {
+                log.warn("Skipping slide deck {} because GCS asset is missing", slideDeck.getId());
+                continue;
+            }
+            try {
+                log.info("Re-processing slide deck {} (lecture {})", slideDeck.getId(), lecture.getId());
+                triggerSlideProcessing(lecture, slideDeck);
+            } catch (AppException ex) {
+                log.error("Failed to re-process slide deck {}: {}", slideDeck.getId(), ex.getMessage());
+            }
+        }
+        slideDeckRepository.flush();
     }
 
     private SlideDeckResponse toResponse(SlideDeckEntity entity) {
@@ -93,7 +160,13 @@ public class SlideDeckServiceImpl implements SlideDeckService {
                 .lectureId(entity.getLecture().getId())
                 .gcpAssetId(entity.getGcpAssetId())
                 .originalName(entity.getOriginalName())
+                .processedFileName(entity.getProcessedFileName())
+                .presentationId(entity.getPresentationId())
                 .pageCount(entity.getPageCount())
+                .keywordsCount(entity.getKeywordsCount())
+                .hasEmbeddings(entity.getHasEmbeddings())
+                .contentSummary(entity.getContentSummary())
+                .allSummary(entity.getAllSummary())
                 .uploadStatus(entity.getUploadStatus())
                 .createdAt(entity.getCreatedAt())
                 .build();
@@ -159,38 +232,105 @@ public class SlideDeckServiceImpl implements SlideDeckService {
 
         if (response.isPresent()) {
             updateSlideDeckWithProcessingResult(slideDeck, response.get());
+            // Notify via WebSocket that processing is complete
+            notificationService.notifySlideProcessingComplete(
+                    lecture.getId(), 
+                    slideDeck.getId(), 
+                    slideDeck.getUploadStatus()
+            );
         } else {
             handleSlideProcessingFailure(slideDeck);
+            // Notify via WebSocket that processing failed
+            notificationService.notifySlideProcessingComplete(
+                    lecture.getId(), 
+                    slideDeck.getId(), 
+                    slideDeck.getUploadStatus()
+            );
         }
     }
 
     private void updateSlideDeckWithProcessingResult(SlideDeckEntity slideDeck,
                                                      SlideProcessingResponsePayload response) {
-        slideDeck.setPageCount(Math.max(response.slideCount(), safeSize(response.slides())));
-        slideDeck.setContentSummary(buildDeckSummary(response));
-        slideDeck.setUploadStatus(AssetStatus.READY);
+        if (response.slides() == null || response.slides().isEmpty()) {
+            log.warn("Slide processing response for deck {} contained no slides. Marking as failed.", slideDeck.getId());
+            handleSlideProcessingFailure(slideDeck);
+            return;
+        }
 
-        if (StringUtils.hasText(response.originalName())) {
-            slideDeck.setOriginalName(response.originalName());
+        slideDeck.setPageCount(Math.max(response.slideCountOrDefault(), safeSize(response.slides())));
+        slideDeck.setKeywordsCount(response.keywordsCountOrDefault());
+        slideDeck.setHasEmbeddings(response.hasEmbeddingsOrDefault());
+
+        if (StringUtils.hasText(response.presentationId())) {
+            slideDeck.setPresentationId(response.presentationId());
+        }
+
+        String resolvedFileName = response.resolvedFileName();
+        if (StringUtils.hasText(resolvedFileName)) {
+            slideDeck.setProcessedFileName(resolvedFileName);
+            if (!StringUtils.hasText(slideDeck.getOriginalName())) {
+                slideDeck.setOriginalName(resolvedFileName);
+            }
+        }
+
+        if (StringUtils.hasText(response.allSummary())) {
+            slideDeck.setAllSummary(response.allSummary().trim());
+        }
+        slideDeck.setContentSummary(buildDeckSummary(response));
+
+        if (slideDeck.getPages() == null) {
+            slideDeck.setPages(new ArrayList<>());
         }
 
         slideDeck.getPages().clear();
+        slideDeckRepository.flush();
+
+        Set<Integer> usedPageNumbers = new HashSet<>();
+        int fallbackPageNumber = 1;
+
         if (response.slides() != null) {
             for (SlideInfoPayload slideInfo : response.slides()) {
                 SlidePageEntity page = new SlidePageEntity();
                 page.setSlideDeck(slideDeck);
-                page.setPageNumber(slideInfo.slideId());
-                page.setTitle(slideInfo.title());
-                page.setContentSummary(buildSlideSummary(slideInfo));
-                page.setAllText(slideInfo.allText());
-                page.setHeadings(new ArrayList<>(copyToList(slideInfo.headings())));
-                page.setBullets(new ArrayList<>(copyToList(slideInfo.bullets())));
-                page.setBody(new ArrayList<>(copyToList(slideInfo.body())));
+                int requestedNumber = slideInfo.slideId();
+                int pageNumber = requestedNumber > 0 ? requestedNumber : fallbackPageNumber;
+                if (pageNumber <= 0 || usedPageNumbers.contains(pageNumber)) {
+                    int originalNumber = pageNumber;
+                    pageNumber = fallbackPageNumber;
+                    while (usedPageNumbers.contains(pageNumber)) {
+                        pageNumber++;
+                    }
+                    log.warn("Slide processing returned duplicate/invalid page number {} for deck {}. Remapped to {}.",
+                            originalNumber, slideDeck.getId(), pageNumber);
+                }
+                usedPageNumbers.add(pageNumber);
+                fallbackPageNumber = Math.max(fallbackPageNumber, pageNumber + 1);
+                page.setPageNumber(pageNumber);
+                
+                // Simplified: Only save keywords and summary from Gemini processing
+                String summary = normalizeSummary(slideInfo.summary(), 2000);
+                page.setSummary(summary);
+                page.setContentSummary(summary != null ? summary : "");
                 page.setKeywords(new ArrayList<>(copyToList(slideInfo.keywords())));
+                
+                // Set empty/default values for removed fields
+                page.setTitle(null);
+                page.setAllText(null);
+                page.setHeadings(new ArrayList<>());
+                page.setBullets(new ArrayList<>());
+                page.setBody(new ArrayList<>());
+                
                 slideDeck.getPages().add(page);
             }
         }
 
+        if (slideDeck.getPages().isEmpty()) {
+            log.warn("Slide deck {} still has zero pages after processing. Marking as failed.", slideDeck.getId());
+            handleSlideProcessingFailure(slideDeck);
+            return;
+        }
+
+        slideDeck.setUploadStatus(AssetStatus.READY);
         slideDeckRepository.save(slideDeck);
         log.info("Slide deck {} processed successfully with {} pages", slideDeck.getId(), slideDeck.getPageCount());
     }
@@ -202,29 +342,32 @@ public class SlideDeckServiceImpl implements SlideDeckService {
     }
 
     private String buildDeckSummary(SlideProcessingResponsePayload response) {
+        String normalized = normalizeSummary(response.allSummary(), 4000);
+        if (normalized != null) {
+            return normalized;
+        }
+
         return "Processed %d slides with %d keywords (embeddings: %s)".formatted(
-                response.slideCount(),
-                response.keywordsCount(),
-                response.hasEmbeddings() ? "enabled" : "disabled"
+                response.slideCountOrDefault(),
+                response.keywordsCountOrDefault(),
+                response.hasEmbeddingsOrDefault() ? "enabled" : "disabled"
         );
     }
 
-    private String buildSlideSummary(SlideInfoPayload slideInfo) {
-        String allText = slideInfo.allText();
-        if (StringUtils.hasText(allText)) {
-            return truncate(allText.trim(), 2000);
+    private String buildSlideFallbackSummary(SlideInfoPayload slideInfo) {
+        // Simplified: Use summary if available, otherwise use slide ID
+        String summary = slideInfo.summary();
+        if (StringUtils.hasText(summary)) {
+            return truncate(summary.trim(), 2000);
         }
-
-        if (StringUtils.hasText(slideInfo.title())) {
-            return slideInfo.title();
-        }
-
-        List<String> bullets = copyToList(slideInfo.bullets());
-        if (!bullets.isEmpty()) {
-            return truncate(String.join("; ", bullets), 2000);
-        }
-
         return "Slide %d".formatted(slideInfo.slideId());
+    }
+
+    private String normalizeSummary(String summary, int maxLength) {
+        if (!StringUtils.hasText(summary)) {
+            return null;
+        }
+        return truncate(summary.trim(), maxLength);
     }
 
     private List<String> copyToList(List<String> source) {

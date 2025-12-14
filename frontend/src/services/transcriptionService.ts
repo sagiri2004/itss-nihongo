@@ -1,5 +1,5 @@
 const DEFAULT_WS_URL =
-  import.meta.env.VITE_SPEECH_WS_URL ?? 'ws://localhost:8010/ws/transcribe'
+  import.meta.env.VITE_SPEECH_WS_URL ?? 'ws://localhost:8010/proxy/speech-stream'
 
 export type StreamingResultPayload = {
   text: string
@@ -42,10 +42,11 @@ export type TranscriptionEventMessage =
     }
 
 export type StartSessionOptions = {
-  lectureId: number
+  lectureId?: number
   sessionId?: string
   presentationId?: string
   languageCode?: string
+  language?: string  // For new proxy endpoint
   model?: string
   enableInterimResults?: boolean
 }
@@ -76,6 +77,7 @@ export const createTranscriptionClient = ({
   let socket: WebSocket | null = null
   let pendingStartPayload: Record<string, unknown> | null = null
   const pendingBinary: ArrayBuffer[] = []
+  let languageToSend: string | null = null
 
   const sendJson = (payload: Record<string, unknown>) => {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
@@ -93,6 +95,12 @@ export const createTranscriptionClient = ({
     socket.binaryType = 'arraybuffer'
 
     socket.onopen = () => {
+      // For new proxy endpoint: send language config first
+      if (languageToSend) {
+        socket?.send(JSON.stringify({ language: languageToSend }))
+        languageToSend = null
+      }
+
       while (pendingBinary.length > 0) {
         const data = pendingBinary.shift()
         if (data) {
@@ -111,7 +119,27 @@ export const createTranscriptionClient = ({
       if (typeof event.data === 'string') {
         try {
           const parsed = JSON.parse(event.data) as TranscriptionEventMessage
-          onEvent(parsed)
+          // Handle new proxy endpoint format
+          if ('transcript' in parsed && 'is_final' in parsed) {
+            // Convert to old format for compatibility
+            onEvent({
+              event: 'transcription',
+              result: {
+                text: parsed.transcript as string,
+                is_final: parsed.is_final as boolean,
+                confidence: (parsed as any).confidence || 0,
+                timestamp: Date.now(),
+                words: [],
+              },
+            })
+          } else if ('error' in parsed) {
+            onEvent({
+              event: 'error',
+              message: parsed.error as string,
+            })
+          } else {
+            onEvent(parsed)
+          }
         } catch (error) {
           console.warn('Failed to parse transcription message', error)
         }
@@ -149,24 +177,43 @@ export const createTranscriptionClient = ({
       sessionId,
       presentationId,
       languageCode,
+      language,
       model,
       enableInterimResults,
     }: StartSessionOptions) => {
-      pendingStartPayload = {
-        action: 'start',
-        lecture_id: lectureId,
-        session_id: sessionId,
-        presentation_id: presentationId,
-        language_code: languageCode,
-        model,
-        enable_interim_results: enableInterimResults,
+      // For new proxy endpoint, store language to send on open
+      if (language) {
+        languageToSend = language
+      } else if (languageCode) {
+        languageToSend = languageCode
+      }
+
+      // Old endpoint still needs start payload
+      if (lectureId) {
+        pendingStartPayload = {
+          action: 'start',
+          lecture_id: lectureId,
+          session_id: sessionId,
+          presentation_id: presentationId,
+          language_code: languageCode || language,
+          model,
+          enable_interim_results: enableInterimResults,
+        }
       }
 
       ensureSocket()
 
-      if (socket?.readyState === WebSocket.OPEN && pendingStartPayload) {
-        socket.send(JSON.stringify(pendingStartPayload))
-        pendingStartPayload = null
+      if (socket?.readyState === WebSocket.OPEN) {
+        // Send language config if using new endpoint
+        if (languageToSend) {
+          socket.send(JSON.stringify({ language: languageToSend }))
+          languageToSend = null
+        }
+        // Send start payload if exists
+        if (pendingStartPayload) {
+          socket.send(JSON.stringify(pendingStartPayload))
+          pendingStartPayload = null
+        }
       }
     },
     sendAudio: (chunk: ArrayBuffer | ArrayBufferView | Blob) => {

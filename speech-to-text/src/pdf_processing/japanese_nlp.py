@@ -55,6 +55,16 @@ class JapaneseNLP:
         'スライド', 'ページ',  # Slide metadata
         # Katakana forms (common in technical contexts)
         'スル', 'コト', 'イル', 'ナシ',  # Katakana versions of suru, koto, iru, nashi
+        # Adverbs and connecting words (trạng từ và từ nối)
+        'として', '後で', '前', '後', '中', '上', '下', '内', '外',
+        '場合', '時', '間', '頃', '際', '最中', '途中',
+        '記載', '報告', 'してください', 'ください', 'して', 'してから',
+        'わからない', 'わから', '修正', '修正して', '修正してください',
+        '記載して', '報告して', '報告してください', '記載して報告してください',
+        'として', 'として、', 'として、後で', '後で修正', '後で修正してください',
+        # Common connecting phrases
+        'について', 'に関して', 'に対して', 'によって', 'において',
+        'として', 'とともに', 'と同時に', 'と共に',
     }
     
     # English stop words
@@ -225,17 +235,17 @@ class JapaneseNLP:
                         latin_tokens = self._tokenize_latin(normalized)
                         keywords.extend(latin_tokens)
                     else:
-                        # Process MeCab tokens
+                        # Process MeCab tokens - prioritize important parts of speech
                         for token in tokens:
-                            # Keep nouns, verbs, and adjectives
-                            if token.pos in ['名詞', '動詞', '形容詞']:
-                                # Generalized stopwords check (Hiragana normalization)
+                            # Priority 1: Nouns (名詞) - most important for keywords
+                            # Priority 2: Important verbs (動詞) - but filter common ones
+                            # Priority 3: Adjectives (形容詞) - less important
+                            
+                            if token.pos == '名詞':
+                                # Keep all nouns (they are most important)
                                 if self.use_stop_words:
-                                    # Check base form
                                     if token.base_form in self.STOP_WORDS:
                                         continue
-                                    # Convert Katakana -> Hiragana to check stopwords
-                                    # Example: デキル (dekiru in Katakana) -> できる (in Hiragana)
                                     hiragana_form = self.to_hiragana(token.base_form)
                                     if hiragana_form in self.STOP_WORDS:
                                         continue
@@ -243,6 +253,52 @@ class JapaneseNLP:
                                 # Skip single character words
                                 if len(token.base_form) < 2:
                                     continue
+                                
+                                # Skip very long words (likely phrases, not keywords)
+                                if len(token.base_form) > 15:
+                                    continue
+                                
+                                keywords.append(token.base_form)
+                                
+                            elif token.pos == '動詞':
+                                # Only keep important verbs (not auxiliaries)
+                                # Filter out common verbs like する, ある, いる, etc.
+                                if self.use_stop_words:
+                                    if token.base_form in self.STOP_WORDS:
+                                        continue
+                                    hiragana_form = self.to_hiragana(token.base_form)
+                                    if hiragana_form in self.STOP_WORDS:
+                                        continue
+                                
+                                # Skip single character words
+                                if len(token.base_form) < 2:
+                                    continue
+                                
+                                # Skip very long words
+                                if len(token.base_form) > 15:
+                                    continue
+                                
+                                # Only keep verbs that are meaningful (not auxiliaries)
+                                # Common auxiliaries are already in STOP_WORDS
+                                keywords.append(token.base_form)
+                                
+                            elif token.pos == '形容詞':
+                                # Keep adjectives but they are lower priority
+                                if self.use_stop_words:
+                                    if token.base_form in self.STOP_WORDS:
+                                        continue
+                                    hiragana_form = self.to_hiragana(token.base_form)
+                                    if hiragana_form in self.STOP_WORDS:
+                                        continue
+                                
+                                # Skip single character words
+                                if len(token.base_form) < 2:
+                                    continue
+                                
+                                # Skip very long words
+                                if len(token.base_form) > 15:
+                                    continue
+                                
                                 keywords.append(token.base_form)
             except Exception as e:
                 # Only log if not OCR (OCR errors are expected)
@@ -258,10 +314,23 @@ class JapaneseNLP:
         
         # Generalized noise filtering (Final validation)
         valid_keywords = []
+        seen_keywords = set()  # Track duplicates
         
         for kw in keywords:
+            # Rule 0: Remove duplicates (case-insensitive for Japanese)
+            kw_normalized = kw.lower() if not self._is_japanese_text(kw) else kw
+            if kw_normalized in seen_keywords:
+                continue
+            seen_keywords.add(kw_normalized)
+            
             # Rule 1: Japanese text - Keep (already filtered stopwords above)
             if self._is_japanese_text(kw):
+                # Additional filtering for Japanese: remove very long phrases
+                if len(kw) > 20:
+                    continue
+                # Remove phrases that contain stop words (likely connecting phrases)
+                if any(stop_word in kw for stop_word in ['として', '後で', '記載して', '報告して', 'してください']):
+                    continue
                 valid_keywords.append(kw)
                 continue
             

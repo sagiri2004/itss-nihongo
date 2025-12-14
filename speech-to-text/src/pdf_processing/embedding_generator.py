@@ -6,9 +6,12 @@ and builds FAISS index for fast similarity search.
 """
 
 from typing import List, Dict, Optional, Tuple
-import numpy as np
-from sentence_transformers import SentenceTransformer
 import logging
+import os
+
+import numpy as np
+import torch
+from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +34,8 @@ class EmbeddingGenerator:
     
     def __init__(self, 
                  model_name: str = "paraphrase-multilingual-mpnet-base-v2",
-                 use_faiss: bool = True):
+                 use_faiss: bool = True,
+                 device: Optional[str] = None):
         """
         Initialize embedding generator.
         
@@ -44,8 +48,20 @@ class EmbeddingGenerator:
         self.model_name = model_name
         self.use_faiss = use_faiss and FAISS_AVAILABLE
         
-        logger.info(f"Loading embedding model: {model_name}")
-        self.model = SentenceTransformer(model_name)
+        env_device = os.getenv("EMBEDDING_DEVICE")
+        if device:
+            self.device = device
+        elif env_device:
+            self.device = env_device
+        else:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        if self.device != "cpu" and not torch.cuda.is_available():
+            logger.warning("Requested embedding device '%s' is not available. Falling back to CPU.", self.device)
+            self.device = "cpu"
+
+        logger.info("Loading embedding model: %s on device %s", model_name, self.device)
+        self.model = SentenceTransformer(model_name, device=self.device)
         self.embedding_dim = self.model.get_sentence_embedding_dimension()
         
         # Storage
@@ -81,12 +97,26 @@ class EmbeddingGenerator:
         logger.info(f"Generating embeddings for {len(texts)} texts")
         
         # Generate embeddings
-        embeddings = self.model.encode(
-            texts,
-            batch_size=batch_size,
-            show_progress_bar=True,
-            convert_to_numpy=True
-        )
+        try:
+            embeddings = self.model.encode(
+                texts,
+                batch_size=batch_size,
+                show_progress_bar=True,
+                convert_to_numpy=True
+            )
+        except RuntimeError as exc:
+            if "CUDA out of memory" in str(exc) and self.device != "cpu":
+                logger.warning("CUDA OOM detected while generating embeddings. Retrying on CPU.")
+                self._switch_to_cpu()
+                # Retry on CPU
+                embeddings = self.model.encode(
+                    texts,
+                    batch_size=batch_size,
+                    show_progress_bar=True,
+                    convert_to_numpy=True
+                )
+            else:
+                raise
         
         # Store
         self.embeddings = embeddings
@@ -153,6 +183,15 @@ class EmbeddingGenerator:
                   if sim >= min_similarity]
         
         return results
+
+    def _switch_to_cpu(self):
+        """Re-initialize the sentence transformer on CPU."""
+        if self.device == "cpu":
+            return
+
+        self.device = "cpu"
+        logger.info("Reloading embedding model %s on CPU.", self.model_name)
+        self.model = SentenceTransformer(self.model_name, device=self.device)
         
     def _faiss_search(self, 
                      query_embedding: np.ndarray,

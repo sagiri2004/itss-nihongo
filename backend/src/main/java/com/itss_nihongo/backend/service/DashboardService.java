@@ -4,7 +4,7 @@ import com.itss_nihongo.backend.dto.response.DashboardSummaryResponse;
 
 public interface DashboardService {
 
-    DashboardSummaryResponse getSummary(Integer lectureLimit);
+    DashboardSummaryResponse getSummary(Integer lectureLimit, String username);
 }
 
 

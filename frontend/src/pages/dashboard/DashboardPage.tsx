@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useDashboardData } from '../../hooks/useDashboardData'
 import { useAuth } from '../../hooks/useAuth'
 import { useLanguage } from '../../context/LanguageContext'
+import { lectureService } from '../../services/lectureService'
 
 const DashboardPage = () => {
   const { data, refresh } = useDashboardData()
@@ -63,6 +64,16 @@ const DashboardPage = () => {
       PROCESSING: t('slides.statusLabels.PROCESSING'),
       READY: t('slides.statusLabels.READY'),
       FAILED: t('slides.statusLabels.FAILED'),
+    }),
+    [t],
+  )
+
+  const lectureStatusLabels = useMemo(
+    () => ({
+      INFO_INPUT: t('myLectures.status.INFO_INPUT'),
+      SLIDE_UPLOAD: t('myLectures.status.SLIDE_UPLOAD'),
+      RECORDING: t('myLectures.status.RECORDING'),
+      COMPLETED: t('myLectures.status.COMPLETED'),
     }),
     [t],
   )
@@ -130,13 +141,11 @@ const DashboardPage = () => {
                 <small>{dateFormatter.format(new Date(lecture.createdAt))}</small>
               </div>
               <div className="session-actions">
-                {lecture.slideDeck && (
-                  <span className="session-tag">
-                    {statusLabels[lecture.slideDeck.uploadStatus as keyof typeof statusLabels] ??
-                      lecture.slideDeck.uploadStatus}{' '}
-                    · {lecture.slideDeck.pageCount}
-                  </span>
-                )}
+                <span className="session-tag">
+                  {lectureStatusLabels[lecture.status as keyof typeof lectureStatusLabels] ??
+                    lecture.status}
+                  {lecture.slideDeck && ` · ${lecture.slideDeck.pageCount}`}
+                </span>
                 <button
                   type="button"
                   className="secondary-button"
@@ -150,6 +159,23 @@ const DashboardPage = () => {
                   onClick={() => handleUploadSlides(lecture.id)}
                 >
                   {t('dashboard.actions.uploadSlides')}
+                </button>
+                <button
+                  type="button"
+                  className="danger-button"
+                  onClick={async () => {
+                    if (!token) return
+                    if (!window.confirm(t('dashboard.actions.confirmDelete'))) return
+                    try {
+                      await lectureService.deleteLecture(lecture.id, token)
+                      refresh(token)
+                    } catch (err) {
+                      const message = err instanceof Error ? err.message : String(err)
+                      setError(message)
+                    }
+                  }}
+                >
+                  {t('dashboard.actions.delete')}
                 </button>
               </div>
             </article>

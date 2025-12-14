@@ -90,9 +90,9 @@ const LoginPage = () => {
             />
             {t('auth.login.remember')}
           </label>
-          <button type="button" className="link-button">
+          <Link to="/forgot-password" className="link-button">
             {t('auth.login.forgot')}
-          </button>
+          </Link>
         </div>
 
         {error && <p className="form-error">{error}</p>}

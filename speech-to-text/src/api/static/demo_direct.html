@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Speech to Text (Multi-language)</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; background: #f0f2f5; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #333; }
+        
+        .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+        select { padding: 10px; border-radius: 5px; border: 1px solid #ddd; font-size: 16px; }
+        button { padding: 10px 20px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; transition: 0.3s; color: white; }
+        #btnStart { background-color: #28a745; }
+        #btnStart:disabled { background-color: #ccc; }
+        #btnStop { background-color: #dc3545; }
+        #btnStop:disabled { background-color: #ccc; }
+        
+        #status { text-align: center; margin-bottom: 10px; color: #666; font-style: italic; }
+        
+        #result-box { 
+            border: 2px dashed #ccc; 
+            padding: 20px; 
+            min-height: 200px; 
+            max-height: 400px;
+            overflow-y: auto; 
+            background: #fff; 
+            border-radius: 5px;
+            font-size: 18px;
+            line-height: 1.6;
+        }
+        .interim { color: #888; }
+        .final { color: #000; font-weight: 500; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h1>🎙️ Speech to Text Streaming</h1>
+        
+        <div class="controls">
+            <select id="languageSelect">
+                <option value="vi-VN">🇻🇳 Tiếng Việt</option>
+                <option value="ja-JP">🇯🇵 Tiếng Nhật</option>
+                <option value="en-US">🇺🇸 Tiếng Anh</option>
+            </select>
+            <button id="btnStart" onclick="startRecording()">Bắt đầu</button>
+            <button id="btnStop" onclick="stopRecording()" disabled>Dừng lại</button>
+        </div>
+
+        <div id="status">Sẵn sàng kết nối...</div>
+        <div id="result-box"></div>
+    </div>
+
+    <script>
+        let socket;
+        let audioContext;
+        let processor;
+        let input;
+        let globalStream;
+
+        const bufferSize = 4096;
+        const targetSampleRate = 16000;
+
+        function startRecording() {
+            const lang = document.getElementById('languageSelect').value;
+            initWebSocket(lang);
+        }
+
+        function stopRecording() {
+            if (socket) socket.close();
+            if (audioContext) audioContext.close();
+            if (globalStream) globalStream.getTracks().forEach(track => track.stop());
+            
+            toggleButtons(false);
+            updateStatus("Đã dừng.");
+        }
+
+        function initWebSocket(language) {
+            updateStatus("Đang kết nối Server...");
+            // Xác định ws hay wss
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            socket = new WebSocket(`${protocol}//${window.location.host}/proxy/speech-stream`);
+
+            socket.onopen = () => {
+                updateStatus("Đã kết nối. Đang gửi cấu hình...");
+                // Gửi thông tin ngôn ngữ NGAY KHI kết nối
+                socket.send(JSON.stringify({ language: language }));
+                
+                // Sau đó mới mở mic
+                initAudio();
+            };
+
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.error) {
+                    alert("Lỗi Server: " + data.error);
+                    stopRecording();
+                    return;
+                }
+                displayResult(data);
+            };
+
+            socket.onclose = () => {
+                stopRecording();
+            };
+
+            socket.onerror = (error) => {
+                console.error("WS Error:", error);
+                updateStatus("Lỗi kết nối WebSocket!");
+            };
+        }
+
+        async function initAudio() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: { 
+                        channelCount: 1, 
+                        sampleRate: targetSampleRate,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    } 
+                });
+                globalStream = stream;
+
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: targetSampleRate 
+                });
+                
+                input = audioContext.createMediaStreamSource(stream);
+                processor = audioContext.createScriptProcessor(bufferSize, 1, 1);
+
+                processor.onaudioprocess = (e) => {
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        const floatSamples = e.inputBuffer.getChannelData(0);
+                        const pcmData = floatTo16BitPCM(floatSamples);
+                        socket.send(pcmData);
+                    }
+                };
+
+                input.connect(processor);
+                processor.connect(audioContext.destination);
+
+                toggleButtons(true);
+                updateStatus("Đang nghe... Hãy nói gì đó!");
+
+            } catch (err) {
+                console.error("Mic Error:", err);
+                updateStatus("Lỗi truy cập Mic: " + err.message);
+                socket.close();
+            }
+        }
+
+        // Chuyển Float32 -> Int16
+        function floatTo16BitPCM(input) {
+            const output = new Int16Array(input.length);
+            for (let i = 0; i < input.length; i++) {
+                const s = Math.max(-1, Math.min(1, input[i]));
+                output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            return output;
+        }
+
+        function displayResult(data) {
+            const resultDiv = document.getElementById('result-box');
+            
+            // Xóa text "interim" cũ đi
+            const oldInterim = document.querySelector('.interim');
+            if (oldInterim) oldInterim.remove();
+
+            const p = document.createElement('span');
+            p.innerText = data.transcript + " ";
+
+            if (data.is_final) {
+                p.className = 'final';
+                resultDiv.appendChild(p);
+                // Thêm xuống dòng khi hết câu
+                // resultDiv.appendChild(document.createElement('br')); 
+            } else {
+                p.className = 'interim';
+                resultDiv.appendChild(p);
+            }
+            
+            resultDiv.scrollTop = resultDiv.scrollHeight;
+        }
+
+        function toggleButtons(isRecording) {
+            document.getElementById('btnStart').disabled = isRecording;
+            document.getElementById('languageSelect').disabled = isRecording;
+            document.getElementById('btnStop').disabled = !isRecording;
+        }
+
+        function updateStatus(msg) {
+            document.getElementById('status').innerText = msg;
+        }
+    </script>
+</body>
+</html>

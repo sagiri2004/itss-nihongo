@@ -6,7 +6,7 @@ spring:
       max-file-size: ${SPRING_MULTIPART_MAX_FILE_SIZE:50MB}
       max-request-size: ${SPRING_MULTIPART_MAX_REQUEST_SIZE:60MB}
   datasource:
-    url: jdbc:mysql://localhost:3306/backend?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    url: jdbc:mysql://localhost:3306/backend?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&sessionVariables=character_set_connection=utf8mb4,character_set_results=utf8mb4,character_set_client=utf8mb4
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -16,6 +16,10 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        connection.useUnicode: true
+        connection.characterEncoding: UTF-8
+        connection.CharSet: UTF-8
+        connection.collation: utf8mb4_unicode_ci
     show-sql: false
 
 security:
@@ -41,4 +45,17 @@ gcp:
 
 slide-processing:
   base-url: ${SLIDE_SERVICE_BASE_URL:http://localhost:8010}
-  timeout-ms: ${SLIDE_SERVICE_TIMEOUT_MS:15000}
+  timeout-ms: ${SLIDE_SERVICE_TIMEOUT_MS:15000} # legacy fallback
+  connect-timeout-ms: ${SLIDE_SERVICE_CONNECT_TIMEOUT_MS:5000}
+  read-timeout-ms: ${SLIDE_SERVICE_READ_TIMEOUT_MS:120000}
+
+spring.mail:
+  host: smtp.gmail.com
+  port: 587
+  username: izumisagiri2004@gmail.com
+  password: mlmzfiubtkboqslh
+  properties:
+    mail:
+      smtp:
+        auth: true
+        starttls.enable: true

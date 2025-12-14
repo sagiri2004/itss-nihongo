@@ -20,5 +20,10 @@ public class RegisterRequest {
     @NotBlank
     @Size(min = 6, max = 100)
     private String password;
+
+    @NotBlank
+    @jakarta.validation.constraints.Email
+    @Size(max = 255)
+    private String email;
 }
 

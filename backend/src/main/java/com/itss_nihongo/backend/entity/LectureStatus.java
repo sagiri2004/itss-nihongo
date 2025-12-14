@@ -1,9 +1,9 @@
 package com.itss_nihongo.backend.entity;
 
 public enum LectureStatus {
-    DRAFT,
-    RECORDING,
-    PROCESSING,
-    PUBLISHED
+    INFO_INPUT,      // Nhập thông tin
+    SLIDE_UPLOAD,    // Tải slide
+    RECORDING,       // Ghi âm
+    COMPLETED        // Hoàn thành
 }
 

@@ -27,6 +27,18 @@ public class SlideDeckController {
                                              @RequestPart("file") MultipartFile file) {
         return slideDeckService.uploadSlideDeck(lectureId, file);
     }
+
+    @PostMapping("/reprocess")
+    @PreAuthorize("hasAnyRole('ADMIN','USER')")
+    public SlideDeckResponse reprocessSlideDeck(@RequestParam("lectureId") Long lectureId) {
+        return slideDeckService.reprocessSlideDeck(lectureId);
+    }
+
+    @PostMapping("/reprocess/all")
+    @PreAuthorize("hasRole('ADMIN')")
+    public void reprocessAllSlideDecks() {
+        slideDeckService.reprocessAllSlideDecks();
+    }
 }
 
 

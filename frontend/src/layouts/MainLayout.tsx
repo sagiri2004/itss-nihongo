@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import LanguageSwitcher from '../components/LanguageSwitcher'
+import NotificationBell from '../components/notifications/NotificationBell'
 import { useLanguage } from '../context/LanguageContext'
 import { useAuth } from '../hooks/useAuth'
 import { classNames } from '../utils/classNames'
@@ -14,8 +15,9 @@ const MainLayout = () => {
     () => [
       { label: t('nav.home'), to: '/app/dashboard' },
       { label: t('nav.createSession'), to: '/app/lectures/new' },
-      { label: t('nav.manageSlides'), to: '/app/slides/upload' },
+      { label: t('nav.myLectures'), to: '/app/lectures/my' },
       { label: t('nav.transcription'), to: '/app/transcription' },
+      { label: t('nav.history'), to: '/app/history' },
     ],
     [t],
   )
@@ -43,12 +45,7 @@ const MainLayout = () => {
         </nav>
         <div className="topbar__actions">
           <LanguageSwitcher />
-          <span className="icon-button" aria-hidden="true">
-            🔔
-          </span>
-          <span className="icon-button" aria-hidden="true">
-            📩
-          </span>
+          <NotificationBell />
           {user && <div className="user-pill">{user.username}</div>}
           <button type="button" className="secondary-button" onClick={handleLogout}>
             {t('common.logout')}

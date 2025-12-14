@@ -6,6 +6,9 @@ import { lectureService } from '../../services/lectureService'
 import { useAuth } from '../../hooks/useAuth'
 import { useLanguage } from '../../context/LanguageContext'
 import type { LectureDetail, SlidePage } from '../../types/lecture'
+import SlideTranscriptionPanel from '../../components/transcription/SlideTranscriptionPanel'
+import RecordingAnalysisPanel from '../../components/analysis/RecordingAnalysisPanel'
+import '../../styles/lecture-detail.css'
 
 GlobalWorkerOptions.workerSrc = pdfWorker
 
@@ -29,6 +32,7 @@ const LectureDetailPage = () => {
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [isPdfLoading, setIsPdfLoading] = useState(false)
   const [totalPages, setTotalPages] = useState(0)
+  const [savedRecording, setSavedRecording] = useState<any>(null)
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const pdfRef = useRef<PDFDocumentProxy | null>(null)
@@ -119,7 +123,6 @@ const LectureDetailPage = () => {
     if (pdfRef.current) {
       renderPage(currentPageIndex + 1)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPageIndex])
 
   const cleanupPdf = () => {
@@ -170,16 +173,9 @@ const LectureDetailPage = () => {
     }
   }
 
-  const dateFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat(language === 'ja' ? 'ja-JP' : 'vi-VN', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }),
-    [language],
-  )
-
   const slideDeck = lecture?.slideDeck
+  const pages: SlidePage[] = useMemo(() => slideDeck?.pages ?? [], [slideDeck])
+
   const statusLabels = useMemo(
     () => ({
       UPLOADED: t('slides.statusLabels.UPLOADED'),
@@ -190,20 +186,40 @@ const LectureDetailPage = () => {
     [t],
   )
 
+  const lectureStatusLabels = useMemo(
+    () => ({
+      INFO_INPUT: t('myLectures.status.INFO_INPUT'),
+      SLIDE_UPLOAD: t('myLectures.status.SLIDE_UPLOAD'),
+      RECORDING: t('myLectures.status.RECORDING'),
+      COMPLETED: t('myLectures.status.COMPLETED'),
+    }),
+    [t],
+  )
+
   const deckStatusLabel =
     slideDeck?.uploadStatus &&
     (statusLabels[slideDeck.uploadStatus as keyof typeof statusLabels] ?? slideDeck.uploadStatus)
 
-  const pages: SlidePage[] = slideDeck?.pages ?? []
-  const keywordCount = useMemo(
-    () =>
-      pages.reduce((total, page) => {
+  const lectureStatusLabel =
+    lecture?.status &&
+    (lectureStatusLabels[lecture.status as keyof typeof lectureStatusLabels] ?? lecture.status)
+
+  const keywordCount = useMemo(() => {
+    if (slideDeck?.keywordsCount != null) {
+      return slideDeck.keywordsCount
+    }
+    return pages.reduce((total, page) => {
         return total + (page.keywords?.length ?? 0)
-      }, 0),
-    [pages],
-  )
+    }, 0)
+  }, [pages, slideDeck?.keywordsCount])
   const pageTotal = totalPages || pages.length
   const currentPage = pages[currentPageIndex] ?? null
+  const currentPageSummary = currentPage?.summary ?? currentPage?.contentSummary ?? null
+
+  // Reset savedRecording khi slide thay đổi
+  useEffect(() => {
+    setSavedRecording(null)
+  }, [currentPageIndex])
 
   const handlePrev = () => {
     setCurrentPageIndex((prev) => Math.max(prev - 1, 0))
@@ -254,28 +270,11 @@ const LectureDetailPage = () => {
                 {t('lectureDetail.meta.lectureTitle')}: <strong>{lecture?.title ?? '-'}</strong>
               </span>
               <span>
-                {t('lectureDetail.meta.status')}: <strong>{deckStatusLabel}</strong>
+                {t('lectureDetail.meta.status')}: <strong>{lectureStatusLabel || deckStatusLabel || '-'}</strong>
               </span>
               <span>
                 {t('lectureDetail.meta.pages')}: <strong>{slideDeck.pageCount ?? pages.length}</strong>
               </span>
-              {slideDeck.originalName && (
-                <span>
-                  {t('lectureDetail.meta.originalName')}:{' '}
-                  <strong>{slideDeck.originalName}</strong>
-                </span>
-              )}
-              {slideDeck.createdAt && (
-                <span>
-                  {t('lectureDetail.meta.uploadedAt')}:{' '}
-                  <strong>{dateFormatter.format(new Date(slideDeck.createdAt))}</strong>
-                </span>
-              )}
-              {slideDeck.contentSummary && (
-                <span>
-                  {t('lectureDetail.meta.summary')}: <strong>{slideDeck.contentSummary}</strong>
-                </span>
-              )}
               <span>
                 {t('lectureDetail.meta.keywords')}: <strong>{keywordCount}</strong>
               </span>
@@ -289,36 +288,13 @@ const LectureDetailPage = () => {
         </div>
       </section>
 
-      <section className="lecture-detail-grid">
-        <div className="slide-viewer-card">
-          <header className="slide-viewer-header">
+      {/* Main Content: Slide Viewer + Transcription Side by Side */}
+      <section className="lecture-detail-main-grid">
+        {/* Left: Slide Viewer */}
+        <div className="slide-viewer-card-enhanced">
+          <header className="slide-viewer-header-enhanced">
             <h2>{t('lectureDetail.viewer.title')}</h2>
-            {slideDeck && slideDeck.contentSummary && (
-              <p className="viewer-summary">{slideDeck.contentSummary}</p>
-            )}
-          </header>
-
-          <div className="slide-viewer-body">
-            {viewerStateMessage ? (
-              <div className="viewer-placeholder">{viewerStateMessage}</div>
-            ) : (
-              <>
-                <canvas ref={canvasRef} className="slide-canvas" />
-                {isPdfLoading && <div className="viewer-loading">{t('common.loading')}</div>}
-              </>
-            )}
-          </div>
-
-          <footer className="viewer-controls">
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={handlePrev}
-              disabled={currentPageIndex === 0 || Boolean(viewerStateMessage)}
-            >
-              {t('lectureDetail.viewer.prev')}
-            </button>
-            <span className="viewer-page-indicator">
+            <span className="viewer-page-indicator-enhanced">
               {pageTotal > 0
                 ? t('lectureDetail.viewer.pageLabel', {
                     current: Math.min(currentPageIndex + 1, pageTotal),
@@ -326,6 +302,30 @@ const LectureDetailPage = () => {
                   })
                 : ''}
             </span>
+          </header>
+
+          <div className="slide-viewer-body-enhanced">
+            {viewerStateMessage ? (
+              <div className="viewer-placeholder">{viewerStateMessage}</div>
+            ) : (
+              <>
+                <div className="slide-canvas-container">
+                  <canvas ref={canvasRef} className="slide-canvas-enhanced" />
+                  {isPdfLoading && <div className="viewer-loading">{t('common.loading')}</div>}
+                </div>
+              </>
+            )}
+          </div>
+
+          <footer className="viewer-controls-enhanced">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handlePrev}
+              disabled={currentPageIndex === 0 || Boolean(viewerStateMessage)}
+            >
+              ← {t('lectureDetail.viewer.prev')}
+            </button>
             <button
               type="button"
               className="secondary-button"
@@ -335,82 +335,65 @@ const LectureDetailPage = () => {
                 currentPageIndex >= Math.max(pageTotal - 1, 0)
               }
             >
-              {t('lectureDetail.viewer.next')}
+              {t('lectureDetail.viewer.next')} →
             </button>
           </footer>
         </div>
 
-        <aside className="slide-summary-card">
-          <header className="slide-summary-header">
-            <h2>{t('lectureDetail.summary.title')}</h2>
-          </header>
-          {currentPage ? (
-            <div className="slide-summary">
-              <h3>{t('lectureDetail.summary.slideHeading', { page: currentPage.pageNumber ?? '?' })}</h3>
-              {currentPage.title && <p className="slide-summary-title">{currentPage.title}</p>}
-              {currentPage.contentSummary && (
-                <p className="slide-summary-paragraph">{currentPage.contentSummary}</p>
-              )}
-              {currentPage.allText && (
-                <details open>
-                  <summary>{t('lectureDetail.summary.allText')}</summary>
-                  <p>{currentPage.allText}</p>
-                </details>
-              )}
-              {currentPage.headings?.length > 0 && (
-                <div>
-                  <strong>{t('lectureDetail.summary.headings')}</strong>
-                  <ul>
-                    {currentPage.headings.map((item, index) => (
-                      <li key={`heading-${index}`}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {currentPage.bullets?.length > 0 && (
-                <div>
-                  <strong>{t('lectureDetail.summary.bullets')}</strong>
-                  <ul>
-                    {currentPage.bullets.map((item, index) => (
-                      <li key={`bullet-${index}`}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {currentPage.body?.length > 0 && (
-                <div>
-                  <strong>{t('lectureDetail.summary.body')}</strong>
-                  <ul>
-                    {currentPage.body.map((item, index) => (
-                      <li key={`body-${index}`}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {currentPage.keywords?.length > 0 && (
-                <div className="keywords-row">
-                  <strong>{t('lectureDetail.summary.keywords')}</strong>
-                  <div className="keyword-list">
-                    {currentPage.keywords.map((item, index) => (
-                      <span key={`keyword-${index}`} className="keyword-pill">
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="slide-summary-empty">{t('lectureDetail.summary.empty')}</p>
+        {/* Right: Transcription Panel */}
+        <aside className="transcription-panel-card">
+          {numericLectureId && (
+            <SlideTranscriptionPanel
+              lectureId={numericLectureId}
+              slidePageNumber={currentPage?.pageNumber}
+              keywords={currentPage?.keywords ?? []}
+              onRecordingSaved={setSavedRecording}
+            />
           )}
         </aside>
       </section>
 
-      <section className="form-section">
-        <h2>{t('lectureDetail.audio.title')}</h2>
-        <div className="audio-placeholder">
-          <p>{t('lectureDetail.audio.placeholder')}</p>
-        </div>
+      {/* Bottom: Summary and Keywords */}
+      <section className="lecture-detail-summary-section">
+        {currentPage && (
+          <div className="slide-details-card">
+            <header className="slide-details-header">
+              <h2>
+                {t('lectureDetail.summary.slideHeading', { page: currentPage.pageNumber ?? '?' })}
+              </h2>
+            </header>
+            {currentPageSummary && (
+              <div className="slide-summary-content">
+                <h3>{t('lectureDetail.summary.summaryTitle')}</h3>
+                <p className="slide-summary-paragraph">{currentPageSummary}</p>
+              </div>
+            )}
+            {currentPage.keywords?.length > 0 && (
+              <div className="keywords-section">
+                <h3>{t('lectureDetail.summary.keywords')} ({currentPage.keywords.length})</h3>
+                <div className="keyword-list-full">
+                  {currentPage.keywords.map((item, index) => (
+                    <span key={`keyword-${index}`} className="keyword-pill-full">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Recording Analysis Panel */}
+        {numericLectureId && (
+          <RecordingAnalysisPanel
+            recording={savedRecording}
+            slideContent={currentPageSummary || ''}
+            slideKeywords={currentPage?.keywords || []}
+            lectureId={numericLectureId}
+            slidePageNumber={currentPage?.pageNumber}
+            onRecordingSaved={setSavedRecording}
+          />
+        )}
       </section>
 
       {isLoading && <p>{t('common.loading')}</p>}

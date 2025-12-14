@@ -20,8 +20,8 @@ public class DataSeeder {
         return args -> userRepository.findByUsername("admin").ifPresentOrElse(
                 user -> log.info("Admin user already exists"),
                 () -> {
-                    userService.registerUser("admin", "Admin@123", Set.of(Role.ROLE_ADMIN, Role.ROLE_USER));
-                    log.info("Default admin user created with username 'admin'");
+                    userService.registerUser("admin", "Admin@123", "admin@itss-nihongo.com", Set.of(Role.ROLE_ADMIN, Role.ROLE_USER));
+                    log.info("Default admin user created with username 'admin' and email 'admin@itss-nihongo.com'");
                 }
         );
     }

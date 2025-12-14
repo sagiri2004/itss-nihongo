@@ -3,7 +3,20 @@ export type LoginPayload = {
   password: string
 }
 
-export type RegisterPayload = LoginPayload
+export type RegisterPayload = {
+  username: string
+  password: string
+  email: string
+}
+
+export type ForgotPasswordPayload = {
+  email: string
+}
+
+export type ResetPasswordPayload = {
+  token: string
+  newPassword: string
+}
 
 export type AuthResponse = {
   token: string

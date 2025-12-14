@@ -16,27 +16,38 @@ export type SlideDeckSummary = {
   id: number
   gcpAssetId: string
   originalName?: string | null
+  processedFileName?: string | null
+  presentationId?: string | null
   pageCount: number
+  keywordsCount?: number | null
+  hasEmbeddings?: boolean | null
   uploadStatus: string
+  contentSummary?: string | null
+  allSummary?: string | null
 }
 
 export type LectureSummary = Lecture & {
   slideDeck?: SlideDeckSummary | null
 }
 
+/**
+ * Simplified slide page type matching Gemini-based processing.
+ * Only contains: pageNumber, summary, keywords
+ */
 export type SlidePage = {
   pageNumber: number | null
-  title?: string | null
   contentSummary?: string | null
+  summary?: string | null
+  keywords: string[]
+  // Deprecated fields (kept for backward compatibility, but will be empty)
+  title?: string | null
   allText?: string | null
   headings: string[]
   bullets: string[]
   body: string[]
-  keywords: string[]
 }
 
 export type SlideDeckDetail = SlideDeckSummary & {
-  contentSummary?: string | null
   createdAt: string
   signedUrl?: string | null
   pages: SlidePage[]

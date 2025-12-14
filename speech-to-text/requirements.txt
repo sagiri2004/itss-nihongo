@@ -58,3 +58,9 @@ python-multipart>=0.0.6
 # Data Processing
 numpy>=2.0.0  # Python 3.13 compatible (2.x series)
 pandas>=2.0.0.0
+
+# LLM APIs (Optional - for advanced summarization)
+# Uncomment the ones you want to use:
+# openai>=1.0.0  # For OpenAI GPT-4/GPT-3.5
+# anthropic>=0.18.0  # For Anthropic Claude
+# google-generativeai>=0.3.0  # For Google Gemini

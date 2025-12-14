@@ -458,10 +458,20 @@ class PDFExtractor:
         char_count = len(clean_text)
         
         # Calculate valid character ratio
-        # Count letters, numbers, and basic punctuation (not icons, table chars, or encoding garbage)
+        # Count letters, numbers, basic punctuation, AND Japanese characters
+        # Japanese character ranges:
+        # - Hiragana: \u3040-\u309F
+        # - Katakana: \u30A0-\u30FF
+        # - Kanji: \u4E00-\u9FAF
+        # - Full-width punctuation: \u3000-\u303F
         valid_chars = sum(
             1 for c in clean_text 
-            if c.isalnum() or c in ".,:;!?()[]"
+            if (c.isalnum() or 
+                c in ".,:;!?()[]" or
+                '\u3040' <= c <= '\u309F' or  # Hiragana
+                '\u30A0' <= c <= '\u30FF' or  # Katakana
+                '\u4E00' <= c <= '\u9FAF' or  # Kanji
+                '\u3000' <= c <= '\u303F')    # CJK punctuation
         )
         valid_ratio = valid_chars / char_count if char_count > 0 else 0
         

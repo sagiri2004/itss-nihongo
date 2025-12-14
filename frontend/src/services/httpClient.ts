@@ -14,17 +14,27 @@ const buildUrl = (path: string) => {
 const parseError = async (response: Response) => {
   let message = 'Đã xảy ra lỗi, vui lòng thử lại.'
 
+  // Clone response to avoid "body stream already read" error
+  const clonedResponse = response.clone()
+
   try {
-    const data = await response.json()
+    const data = await clonedResponse.json()
     message = data.message ?? data.error ?? message
   } catch {
-    const text = await response.text()
-    if (text) {
-      message = text
+    try {
+      const text = await response.text()
+      if (text) {
+        message = text
+      }
+    } catch {
+      // If both fail, use status text
+      message = response.statusText || message
     }
   }
 
-  throw new Error(message)
+  const error = new Error(message) as Error & { status?: number }
+  error.status = response.status
+  throw error
 }
 
 export const httpClient = async <T>(path: string, options: RequestOptions = {}): Promise<T> => {

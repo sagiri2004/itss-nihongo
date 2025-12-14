@@ -10,6 +10,7 @@ public class SlidePageResponse {
     Integer pageNumber;
     String title;
     String contentSummary;
+    String summary;
     String allText;
     List<String> headings;
     List<String> bullets;

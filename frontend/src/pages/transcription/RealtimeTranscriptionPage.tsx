@@ -41,6 +41,7 @@ const RealtimeTranscriptionPage = () => {
   const [statusState, setStatusState] = useState<LocalizedMessage>({ key: 'transcription.status.ready' })
   const [fileInfo, setFileInfo] = useState<{ name: string; sizeKB: number; sampleRate?: number; bitsPerSample?: number } | null>(null)
   const [fileWarningState, setFileWarningState] = useState<LocalizedMessage | null>(null)
+  const [languageCode, setLanguageCode] = useState<string>('ja-JP')
 
   const clientRef = useRef<ReturnType<typeof createTranscriptionClient> | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
@@ -195,6 +196,9 @@ const RealtimeTranscriptionPage = () => {
         return
       }
 
+      // For new proxy endpoint, we don't need to send start after first chunk
+      // Language is already sent on open
+      // But keep this for backward compatibility with old endpoint
       if (
         sent &&
         !micStartSentRef.current &&
@@ -202,11 +206,19 @@ const RealtimeTranscriptionPage = () => {
         clientRef.current.readyState() === WebSocket.OPEN
       ) {
         micStartSentRef.current = true
-        clientRef.current.start({
-          lectureId: micLectureIdRef.current,
-          presentationId: presentationId ?? undefined,
-          enableInterimResults: true,
-        })
+        // Only send start if using old endpoint (has lectureId)
+        // New proxy endpoint doesn't need this
+        try {
+          clientRef.current.start({
+            lectureId: micLectureIdRef.current,
+            presentationId: presentationId ?? undefined,
+            language: languageCode,
+            enableInterimResults: true,
+          })
+        } catch (e) {
+          // Ignore if endpoint doesn't support it
+          console.log('Start command not needed for this endpoint')
+        }
         setStatusState({ key: 'transcription.status.sendingFirstChunk' })
       }
     }
@@ -484,6 +496,12 @@ const RealtimeTranscriptionPage = () => {
     clientRef.current = createTranscriptionClient({
       onEvent: handleSocketEvent,
       onOpen: () => {
+        // Send language config for new proxy endpoint
+        if (clientRef.current) {
+          clientRef.current.start({
+            language: languageCode,
+          })
+        }
         setStatusState({ key: 'transcription.status.microPreparing' })
         initializeMicrophoneStream().catch((err) => {
           console.error('Failed to initialize microphone stream', err)
@@ -665,6 +683,19 @@ const RealtimeTranscriptionPage = () => {
               onChange={(event) => setLectureIdInput(event.target.value)}
               disabled={isRecording}
             />
+          </label>
+
+          <label>
+            Ngôn ngữ / Language
+            <select
+              value={languageCode}
+              onChange={(event) => setLanguageCode(event.target.value)}
+              disabled={isRecording}
+            >
+              <option value="ja-JP">🇯🇵 Tiếng Nhật (Japanese)</option>
+              <option value="vi-VN">🇻🇳 Tiếng Việt (Vietnamese)</option>
+              <option value="en-US">🇺🇸 Tiếng Anh (English)</option>
+            </select>
           </label>
 
           <label>

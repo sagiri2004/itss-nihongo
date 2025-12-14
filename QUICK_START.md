@@ -39,6 +39,10 @@ cd speech-to-text
 python3 -m venv venv
 source venv/bin/activate
 
+export GOOGLE_APPLICATION_CREDENTIALS=/home/sagiri/Code/python/speech-to-text/speech-processing-prod-9ffbefa55e2c.json
+
+cd /home/sagiri/Code/itss-nihongo/speech-to-text && /home/sagiri/Code/itss-nihongo/speech-to-text/venv/bin/uvicorn src.api.main:app --host 0.0.0.0 --port 8010 --reload
+
 # 2. Install dependencies
 pip install -r requirements.txt
 

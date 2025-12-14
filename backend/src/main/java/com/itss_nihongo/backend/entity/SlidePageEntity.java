@@ -57,6 +57,9 @@ public class SlidePageEntity {
     @Column(name = "content_summary", columnDefinition = "TEXT", nullable = false)
     private String contentSummary;
 
+    @Column(name = "summary", columnDefinition = "LONGTEXT")
+    private String summary;
+
     @Column(name = "all_text", columnDefinition = "LONGTEXT")
     private String allText;
 

@@ -6,6 +6,10 @@ import org.springframework.web.multipart.MultipartFile;
 public interface SlideDeckService {
 
     SlideDeckResponse uploadSlideDeck(Long lectureId, MultipartFile file);
+
+    SlideDeckResponse reprocessSlideDeck(Long lectureId);
+
+    void reprocessAllSlideDecks();
 }
 
 

@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -188,38 +189,281 @@ async def websocket_transcribe(websocket: WebSocket) -> None:
     async def send_chunk(chunk_bytes: bytes) -> None:
         nonlocal session_started, pending_start_config, session_id, presentation_id
 
-        # 1. Nếu session chưa init (chưa nhận lệnh start), buffer tạm vào list cục bộ
+        # #region agent log
+        DEBUG_LOG_PATH = Path("/home/sagiri/Code/itss-nihongo/.cursor/debug.log")
+        try:
+            with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                import time
+                log_entry = {
+                    "timestamp": int(time.time() * 1000),
+                    "location": "transcription.py:188",
+                    "message": "send_chunk - received audio from client",
+                    "data": {
+                        "chunk_size": len(chunk_bytes),
+                        "session_id": session_id,
+                        "session_started": session_started,
+                        "pending_chunks": len(pending_audio_chunks)
+                    },
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "A"
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception:
+            pass
+        # #endregion
+
+        # 1. Validate audio chunk format
+        if not chunk_bytes or len(chunk_bytes) == 0:
+            logger.warning("Empty audio chunk received from client")
+            return
+        
+        # Ensure even byte count (required for 16-bit LINEAR16)
+        if len(chunk_bytes) % 2 != 0:
+            logger.warning(f"Chunk size {len(chunk_bytes)} not even, padding with zero")
+            chunk_bytes = chunk_bytes + b'\x00'
+
+        # 2. Nếu session chưa init (chưa nhận lệnh start), buffer tạm vào list cục bộ
         if session_id is None:
             logger.debug("Buffering audio chunk (%d bytes) locally - session not initialized", len(chunk_bytes))
             pending_audio_chunks.append(chunk_bytes)
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                    log_entry = {
+                        "timestamp": int(time.time() * 1000),
+                        "location": "transcription.py:227",
+                        "message": "Buffering chunk - session not initialized",
+                        "data": {
+                            "chunk_size": len(chunk_bytes),
+                            "pending_chunks": len(pending_audio_chunks)
+                        },
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "N"
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except Exception:
+                pass
+            # #endregion
             return
 
-        # 2. Gom tất cả audio cần gửi (pending cũ + chunk mới)
+        # 3. Gom tất cả audio cần gửi (pending cũ + chunk mới)
         chunks_to_send = []
         if pending_audio_chunks:
             chunks_to_send.extend(pending_audio_chunks)
             pending_audio_chunks.clear()
         chunks_to_send.append(chunk_bytes)
+        
+        # #region agent log
+        try:
+            with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                log_entry = {
+                    "timestamp": int(time.time() * 1000),
+                    "location": "transcription.py:250",
+                    "message": "Prepared chunks to send",
+                    "data": {
+                        "session_id": session_id,
+                        "chunks_count": len(chunks_to_send),
+                        "session_started": session_started
+                    },
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "O"
+                }
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception:
+            pass
+        # #endregion
 
         try:
-            # 3. BUFFER FIRST: Đẩy audio vào Queue của Session Manager trước
-            # Việc này an toàn vì create_session đã set status='INITIALIZING',
-            # cho phép send_audio_chunk hoạt động.
-            for chunk in chunks_to_send:
-                # Chạy trong executor để không block async loop
-                await run_blocking(manager.send_audio_chunk, session_id, chunk)
-            
-            # 4. START SECOND: Khởi động gRPC Stream sau khi queue đã có dữ liệu
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                    log_entry = {
+                        "timestamp": int(time.time() * 1000),
+                        "location": "transcription.py:210",
+                        "message": "send_chunk - sending to manager",
+                        "data": {
+                            "chunks_count": len(chunks_to_send),
+                            "session_id": session_id,
+                            "session_started": session_started
+                        },
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "B"
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except Exception:
+                pass
+            # #endregion
+
+            # 4. Simple approach based on reference code:
+            # Pre-buffer audio into queue, then start session
+            # This ensures audio is ready when Google API starts consuming
             if not session_started and pending_start_config is not None:
+                # Save config before clearing
+                saved_config = pending_start_config.copy()
+                
+                # Prepare and validate chunks first
+                prepared_chunks = []
+                for chunk in chunks_to_send:
+                    if not chunk or len(chunk) == 0:
+                        continue
+                    if len(chunk) % 2 != 0:
+                        chunk = chunk + b'\x00'
+                    prepared_chunks.append(chunk)
+                
                 logger.info(
-                    "Starting session %s after buffering %d chunks",
-                    session_id, len(chunks_to_send)
+                    "Starting session %s with %d pre-buffered chunks",
+                    session_id, len(prepared_chunks)
                 )
+                
+                # #region agent log
+                try:
+                    with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                        log_entry = {
+                            "timestamp": int(time.time() * 1000),
+                            "location": "transcription.py:240",
+                            "message": "send_chunk - pre-buffering audio before starting session",
+                            "data": {
+                                "session_id": session_id,
+                                "config": saved_config,
+                                "chunks_count": len(prepared_chunks)
+                            },
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "C"
+                        }
+                        f.write(json.dumps(log_entry) + "\n")
+                except Exception:
+                    pass
+                # #endregion
+                
+                # Pre-buffer audio into queue BEFORE starting session
+                # This matches the reference pattern: ensure data is ready before stream starts
+                # #region agent log - Before pre-buffering
+                try:
+                    with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                        log_entry = {
+                            "timestamp": int(time.time() * 1000),
+                            "location": "transcription.py:305",
+                            "message": "Pre-buffering chunks to queue",
+                            "data": {
+                                "session_id": session_id,
+                                "chunks_to_buffer": len(prepared_chunks)
+                            },
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "H"
+                        }
+                        f.write(json.dumps(log_entry) + "\n")
+                except Exception:
+                    pass
+                # #endregion
+                
+                for i, chunk in enumerate(prepared_chunks):
+                    result = await run_blocking(manager.send_audio_chunk, session_id, chunk)
+                    # #region agent log - After each chunk
+                    try:
+                        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                            log_entry = {
+                                "timestamp": int(time.time() * 1000),
+                                "location": "transcription.py:315",
+                                "message": "Chunk sent to manager",
+                                "data": {
+                                    "session_id": session_id,
+                                    "chunk_index": i,
+                                    "chunk_size": len(chunk),
+                                    "result": result
+                                },
+                                "sessionId": "debug-session",
+                                "runId": "run1",
+                                "hypothesisId": "I"
+                            }
+                            f.write(json.dumps(log_entry) + "\n")
+                    except Exception:
+                        pass
+                    # #endregion
+                    if not result:
+                        logger.warning(f"Failed to send chunk {i} to session {session_id}")
+                
+                # Check queue size before starting
+                # #region agent log - Before starting session
+                try:
+                    session = manager.get_session(session_id)
+                    queue_size = session.audio_queue.qsize()
+                    with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                        log_entry = {
+                            "timestamp": int(time.time() * 1000),
+                            "location": "transcription.py:335",
+                            "message": "Queue size before starting session",
+                            "data": {
+                                "session_id": session_id,
+                                "queue_size": queue_size,
+                                "chunks_buffered": len(prepared_chunks)
+                            },
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "J"
+                        }
+                        f.write(json.dumps(log_entry) + "\n")
+                except Exception:
+                    pass
+                # #endregion
+                
+                # Now start session - generator will find audio already in queue
+                # #region agent log - Starting session
+                try:
+                    with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                        log_entry = {
+                            "timestamp": int(time.time() * 1000),
+                            "location": "transcription.py:350",
+                            "message": "Calling start_session",
+                            "data": {
+                                "session_id": session_id,
+                                "config": saved_config
+                            },
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "K"
+                        }
+                        f.write(json.dumps(log_entry) + "\n")
+                except Exception:
+                    pass
+                # #endregion
+                
                 await run_blocking(
                     manager.start_session,
                     session_id,
-                    **pending_start_config,
+                    **saved_config,
                 )
+                
+                # #region agent log - After starting session
+                try:
+                    session = manager.get_session(session_id)
+                    queue_size_after = session.audio_queue.qsize()
+                    with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                        log_entry = {
+                            "timestamp": int(time.time() * 1000),
+                            "location": "transcription.py:365",
+                            "message": "Session started",
+                            "data": {
+                                "session_id": session_id,
+                                "queue_size_after": queue_size_after,
+                                "status": session.status.value
+                            },
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "L"
+                        }
+                        f.write(json.dumps(log_entry) + "\n")
+                except Exception:
+                    pass
+                # #endregion
+                
+                session_started = True
+                pending_start_config = None
                 
                 # Thông báo cho Client biết session đã bắt đầu nhận dạng
                 await websocket.send_json(
@@ -227,17 +471,46 @@ async def websocket_transcribe(websocket: WebSocket) -> None:
                         "event": "session_started",
                         "session_id": session_id,
                         "presentation_id": presentation_id,
-                        "language_code": pending_start_config.get("language_code"),
-                        "model": pending_start_config.get("model"),
+                        "language_code": saved_config.get("language_code"),
+                        "model": saved_config.get("model"),
                     }
                 )
-                session_started = True
-                pending_start_config = None
+            else:
+                # Session already started, just send chunks to queue
+                for chunk in chunks_to_send:
+                    if not chunk or len(chunk) == 0:
+                        continue
+                    if len(chunk) % 2 != 0:
+                        chunk = chunk + b'\x00'
+                    result = await run_blocking(manager.send_audio_chunk, session_id, chunk)
+                    if not result:
+                        logger.warning(f"Failed to send chunk to session {session_id}")
 
         except Exception as exc:
             # Xử lý lỗi gRPC hoặc Logic
             error_msg = f"Failed to process audio stream: {str(exc)}"
-            logger.error("Session %s error: %s", session_id, error_msg)
+            logger.error("Session %s error: %s", session_id, error_msg, exc_info=True)
+            
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                    log_entry = {
+                        "timestamp": int(time.time() * 1000),
+                        "location": "transcription.py:270",
+                        "message": "send_chunk - error occurred",
+                        "data": {
+                            "session_id": session_id,
+                            "error": str(exc),
+                            "error_type": type(exc).__name__
+                        },
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "D"
+                    }
+                    f.write(json.dumps(log_entry) + "\n")
+            except Exception:
+                pass
+            # #endregion
             
             await websocket.send_json({"event": "error", "message": error_msg})
             
@@ -401,7 +674,36 @@ async def websocket_transcribe(websocket: WebSocket) -> None:
                 else:
                     chunk_bytes = bytes(chunk_data)
 
+                # #region agent log - Frontend audio received
+                try:
+                    with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                        log_entry = {
+                            "timestamp": int(time.time() * 1000),
+                            "location": "transcription.py:websocket.receive_bytes",
+                            "message": "Received audio bytes from frontend",
+                            "data": {
+                                "chunk_size": len(chunk_bytes),
+                                "session_id": session_id,
+                                "session_started": session_started,
+                                "pending_chunks": len(pending_audio_chunks),
+                                "has_session": session_id is not None
+                            },
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "E"
+                        }
+                        f.write(json.dumps(log_entry) + "\n")
+                except Exception:
+                    pass
+                # #endregion
+                
+                logger.debug(
+                    "Received audio chunk: %d bytes, session_id=%s, started=%s",
+                    len(chunk_bytes), session_id, session_started
+                )
+
                 if session_id is None:
+                    logger.debug("Buffering chunk (%d bytes) - session not initialized", len(chunk_bytes))
                     pending_audio_chunks.append(chunk_bytes)
                     continue
 

@@ -12,7 +12,13 @@ public class SlideDeckResponse {
     Long lectureId;
     String gcpAssetId;
     String originalName;
+    String processedFileName;
+    String presentationId;
     Integer pageCount;
+    Integer keywordsCount;
+    Boolean hasEmbeddings;
+    String contentSummary;
+    String allSummary;
     AssetStatus uploadStatus;
     Instant createdAt;
 }

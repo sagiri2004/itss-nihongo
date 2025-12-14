@@ -20,6 +20,9 @@ import com.itss_nihongo.backend.entity.SlidePageEntity;
 import com.itss_nihongo.backend.entity.UserEntity;
 import com.itss_nihongo.backend.exception.AppException;
 import com.itss_nihongo.backend.exception.ErrorCode;
+import com.itss_nihongo.backend.entity.HistoryEntity;
+import com.itss_nihongo.backend.entity.LectureStatus;
+import com.itss_nihongo.backend.repository.HistoryRepository;
 import com.itss_nihongo.backend.repository.LectureRepository;
 import com.itss_nihongo.backend.service.LectureService;
 import com.itss_nihongo.backend.service.UserService;
@@ -36,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.util.StringUtils;
+import jakarta.persistence.EntityManager;
 
 @Service
 @Transactional
@@ -48,15 +52,21 @@ public class LectureServiceImpl implements LectureService {
     private final UserService userService;
     private final Storage storage;
     private final GcpStorageProperties storageProperties;
+    private final HistoryRepository historyRepository;
+    private final EntityManager entityManager;
 
     public LectureServiceImpl(LectureRepository lectureRepository,
                               UserService userService,
                               Storage storage,
-                              GcpStorageProperties storageProperties) {
+                              GcpStorageProperties storageProperties,
+                              HistoryRepository historyRepository,
+                              EntityManager entityManager) {
         this.lectureRepository = lectureRepository;
         this.userService = userService;
         this.storage = storage;
         this.storageProperties = storageProperties;
+        this.historyRepository = historyRepository;
+        this.entityManager = entityManager;
     }
 
     @Override
@@ -68,9 +78,20 @@ public class LectureServiceImpl implements LectureService {
                 .title(request.getTitle())
                 .description(request.getDescription())
                 .user(owner)
+                .status(LectureStatus.INFO_INPUT)
                 .build();
 
         LectureEntity saved = lectureRepository.save(lecture);
+        
+        // Create history record
+        HistoryEntity history = HistoryEntity.builder()
+                .user(owner)
+                .lecture(saved)
+                .action(HistoryEntity.HistoryAction.CREATED)
+                .description(String.format("Created lecture: %s (Status: %s)", saved.getTitle(), saved.getStatus()))
+                .build();
+        historyRepository.save(history);
+        
         return LectureResponse.builder()
                 .id(saved.getId())
                 .title(saved.getTitle())
@@ -95,6 +116,68 @@ public class LectureServiceImpl implements LectureService {
         return lectures.stream()
                 .map(this::toSummaryResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<LectureSummaryResponse> getLecturesByUser(String username, Integer limit, LectureStatus status) {
+        UserEntity user = userService.findByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        Sort sort = Sort.by(Sort.Direction.DESC, "createdAt");
+        List<LectureEntity> lectures;
+
+        if (limit != null && limit > 0) {
+            PageRequest pageRequest = PageRequest.of(0, limit, sort);
+            if (status != null) {
+                lectures = lectureRepository.findByUserIdAndStatusOrderByCreatedAtDesc(user.getId(), status, pageRequest);
+            } else {
+                lectures = lectureRepository.findByUserIdOrderByCreatedAtDesc(user.getId(), pageRequest);
+            }
+        } else {
+            if (status != null) {
+                lectures = lectureRepository.findByUserIdOrderByCreatedAtDesc(user.getId())
+                        .stream()
+                        .filter(l -> l.getStatus() == status)
+                        .collect(Collectors.toList());
+            } else {
+                lectures = lectureRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
+            }
+        }
+
+        return lectures.stream()
+                .map(this::toSummaryResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public void deleteLecture(String username, Long lectureId) {
+        UserEntity user = userService.findByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        LectureEntity lecture = lectureRepository.findById(lectureId)
+                .orElseThrow(() -> new AppException(ErrorCode.LECTURE_NOT_FOUND));
+
+        // Check ownership
+        if (!lecture.getUser().getId().equals(user.getId())) {
+            throw new AppException(ErrorCode.ACCESS_DENIED);
+        }
+
+        // Create history record before deletion
+        HistoryEntity history = HistoryEntity.builder()
+                .user(user)
+                .lecture(lecture)
+                .action(HistoryEntity.HistoryAction.DELETED)
+                .description(String.format("Deleted lecture: %s", lecture.getTitle()))
+                .build();
+        historyRepository.save(history);
+        
+        // Flush to ensure history is persisted before deleting lecture
+        entityManager.flush();
+
+        // Delete lecture (cascade will handle related entities)
+        lectureRepository.delete(lecture);
     }
 
     @Override
@@ -125,7 +208,12 @@ public class LectureServiceImpl implements LectureService {
                     .id(slideDeck.getId())
                     .gcpAssetId(slideDeck.getGcpAssetId())
                     .originalName(slideDeck.getOriginalName())
+                    .processedFileName(slideDeck.getProcessedFileName())
+                    .presentationId(slideDeck.getPresentationId())
                     .pageCount(slideDeck.getPageCount())
+                    .keywordsCount(slideDeck.getKeywordsCount())
+                    .hasEmbeddings(slideDeck.getHasEmbeddings())
+                    .contentSummary(slideDeck.getContentSummary())
                     .uploadStatus(slideDeck.getUploadStatus())
                     .build();
         }
@@ -161,9 +249,14 @@ public class LectureServiceImpl implements LectureService {
                 .id(slideDeck.getId())
                 .gcpAssetId(slideDeck.getGcpAssetId())
                 .originalName(slideDeck.getOriginalName())
+                .processedFileName(slideDeck.getProcessedFileName())
+                .presentationId(slideDeck.getPresentationId())
                 .pageCount(slideDeck.getPageCount())
+                .keywordsCount(slideDeck.getKeywordsCount())
+                .hasEmbeddings(slideDeck.getHasEmbeddings())
                 .uploadStatus(slideDeck.getUploadStatus())
                 .contentSummary(slideDeck.getContentSummary())
+                .allSummary(slideDeck.getAllSummary())
                 .createdAt(slideDeck.getCreatedAt())
                 .signedUrl(buildSignedUrl(slideDeck.getGcpAssetId()))
                 .pages(pages)
@@ -216,6 +309,7 @@ public class LectureServiceImpl implements LectureService {
                 .pageNumber(page.getPageNumber())
                 .title(page.getTitle())
                 .contentSummary(page.getContentSummary())
+                .summary(page.getSummary())
                 .allText(page.getAllText())
                 .headings(new ArrayList<>(Optional.ofNullable(page.getHeadings()).orElseGet(List::of)))
                 .bullets(new ArrayList<>(Optional.ofNullable(page.getBullets()).orElseGet(List::of)))

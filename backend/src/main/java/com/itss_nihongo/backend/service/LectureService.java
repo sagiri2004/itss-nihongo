@@ -13,9 +13,13 @@ public interface LectureService {
 
     List<LectureSummaryResponse> getLectures(Integer limit);
 
+    List<LectureSummaryResponse> getLecturesByUser(String username, Integer limit, com.itss_nihongo.backend.entity.LectureStatus status);
+
     LectureDetailResponse getLecture(Long lectureId);
 
     SlideDeckFileResponse getSlideDeckFile(Long lectureId);
+
+    void deleteLecture(String username, Long lectureId);
 }
 
 

@@ -8,10 +8,12 @@ Manages:
 - Automatic renewal before 5-minute timeout
 """
 
+import json
 import logging
 import time
 import threading
 import queue
+from pathlib import Path
 from typing import Optional, Dict, Callable
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -28,6 +30,7 @@ from .errors import (
     SessionNotFoundError,
     SessionRenewalError,
     StreamInterruptedError,
+    AudioChunkError,
 )
 
 logger = logging.getLogger(__name__)
@@ -269,33 +272,115 @@ class StreamingSessionManager:
             )
             
             # Create request generator that reads from queue
+            # Based on simple pattern: config first, then continuous audio stream
             def request_generator():
-                # First request: config only
+                logger.debug(f"Request generator started for session {session_id}")
+                
+                # First request: config only (required by Google API)
+                logger.debug(f"Yielding config request for session {session_id}")
                 yield cloud_speech.StreamingRecognizeRequest(
                     recognizer=recognizer,
                     streaming_config=streaming_config
                 )
+                logger.debug(f"Config request sent for session {session_id}")
                 
-                # Subsequent requests: audio chunks from queue
+                # Check initial queue size
+                initial_queue_size = session.audio_queue.qsize()
+                logger.info(
+                    f"Request generator: initial queue_size={initial_queue_size} for session {session_id}"
+                )
+                
+                if initial_queue_size == 0:
+                    logger.warning(
+                        f"WARNING: Request generator started with EMPTY queue for session {session_id}. "
+                        "Google API may timeout if audio doesn't arrive within ~10 seconds."
+                    )
+                
+                chunk_count = 0
+                # Subsequent requests: continuous audio stream from queue
+                # Keep it simple - just get chunks and yield them immediately
                 while not session.stop_listener.is_set():
                     try:
-                        # Get chunk from queue - block until audio is available
-                        chunk = session.audio_queue.get(timeout=5.0)  # Longer timeout
+                        # Get chunk from queue with short timeout
+                        # Google API expects continuous stream, so we use short timeout
+                        chunk = session.audio_queue.get(timeout=0.5)
+                        chunk_count += 1
+                        
+                        logger.debug(
+                            f"Got chunk #{chunk_count} from queue for session {session_id}: "
+                            f"{len(chunk)} bytes, queue_size={session.audio_queue.qsize()}"
+                        )
+                        
                         if chunk is None:  # Sentinel value to stop
+                            logger.debug(f"Received stop signal for session {session_id}")
                             break
                         
-                        yield cloud_speech.StreamingRecognizeRequest(
-                            audio=chunk
-                        )
+                        # Validate chunk before sending
+                        if not chunk or len(chunk) == 0:
+                            logger.warning(f"Empty chunk received for session {session_id}, skipping")
+                            continue
+                        
+                        # Ensure chunk is even bytes (required for 16-bit samples)
+                        if len(chunk) % 2 != 0:
+                            logger.warning(f"Chunk size {len(chunk)} not even, padding with zero")
+                            chunk = chunk + b'\x00'
+                        
+                        # Validate chunk size (Google API has limits)
+                        if len(chunk) > 65536:  # 64KB max per request
+                            logger.warning(f"Chunk too large ({len(chunk)} bytes), splitting")
+                            # Split large chunk
+                            for i in range(0, len(chunk), 65536):
+                                sub_chunk = chunk[i:i+65536]
+                                yield cloud_speech.StreamingRecognizeRequest(
+                                    audio=sub_chunk
+                                )
+                        else:
+                            # Send audio chunk immediately
+                            yield cloud_speech.StreamingRecognizeRequest(
+                                audio=chunk
+                            )
+                            logger.debug(
+                                f"Sent chunk #{chunk_count} to Google API for session {session_id}"
+                            )
                     except queue.Empty:
-                        # If no audio for 5 seconds, log warning but continue
-                        logger.warning(f"No audio received for session {session_id} after 5s")
+                        # If no audio for 0.5s, continue waiting (normal for pauses in speech)
+                        # Don't break - keep stream alive for continuous recognition
+                        logger.debug(
+                            f"No audio in queue for 0.5s for session {session_id}, "
+                            f"chunks_sent={chunk_count}, continuing..."
+                        )
                         continue
+                    except Exception as e:
+                        logger.error(
+                            f"Error in request generator for session {session_id}: {e}",
+                            exc_info=True
+                        )
+                        break
+                
+                logger.info(
+                    f"Request generator finished for session {session_id}: "
+                    f"total_chunks_sent={chunk_count}"
+                )
+            
+            # Check queue size before starting stream
+            queue_size = session.audio_queue.qsize()
+            logger.info(
+                f"Starting session {session_id}: queue_size={queue_size}, "
+                f"model={model}, language={language_code}"
+            )
+            
+            if queue_size == 0:
+                logger.warning(
+                    f"WARNING: Starting session {session_id} with EMPTY queue. "
+                    "This may cause Google API timeout if audio doesn't arrive quickly."
+                )
             
             # Open bidirectional gRPC stream
+            logger.debug(f"Opening gRPC stream for session {session_id}")
             session.stream = self.client.streaming_recognize(
                 requests=request_generator()
             )
+            logger.debug(f"gRPC stream opened for session {session_id}")
             
             # Start result listener thread
             session.result_listener_thread = threading.Thread(
@@ -309,8 +394,8 @@ class StreamingSessionManager:
             session.last_audio_time = time.time()
             
             logger.info(
-                f"Session started: {session_id} "
-                f"(model={model}, language={language_code})"
+                f"Session started successfully: {session_id} "
+                f"(model={model}, language={language_code}, queue_size={queue_size})"
             )
             
             return True
@@ -349,21 +434,79 @@ class StreamingSessionManager:
             return False
         
         try:
+            # Validate chunk before processing
+            if not chunk or len(chunk) == 0:
+                logger.warning(f"Empty chunk received for session {session_id}")
+                return False
+            
+            # Log before processing
+            queue_size_before = session.audio_queue.qsize()
+            logger.debug(
+                f"Processing chunk for session {session_id}: "
+                f"input_size={len(chunk)}, queue_size_before={queue_size_before}"
+            )
+            
             # Process chunk (returns list of ready chunks after handling edge cases)
             ready_chunks = session.audio_handler.process_chunk(chunk)
             
             if not ready_chunks:
                 # Chunk was buffered in accumulator, not ready to send yet
+                logger.debug(
+                    f"Chunk buffered in accumulator for session {session_id}: "
+                    f"input_size={len(chunk)}, queue_size={session.audio_queue.qsize()}"
+                )
                 return True
             
             # Put all ready chunks into queue
             for ready_chunk in ready_chunks:
+                # Final validation before queuing
+                if not ready_chunk or len(ready_chunk) == 0:
+                    logger.warning(f"Empty ready chunk, skipping")
+                    continue
+                
+                # Ensure even byte count (required for 16-bit LINEAR16)
+                if len(ready_chunk) % 2 != 0:
+                    logger.warning(f"Chunk size {len(ready_chunk)} not even, padding")
+                    ready_chunk = ready_chunk + b'\x00'
+                
                 try:
+                    # Put chunk into queue immediately (non-blocking if possible)
                     session.audio_queue.put(ready_chunk, timeout=1.0)
                     
                     session.total_chunks_sent += 1
                     session.total_bytes_sent += len(ready_chunk)
                     session.last_audio_time = time.time()
+                    
+                    queue_size = session.audio_queue.qsize()
+                    logger.info(
+                        f"Queued chunk for session {session_id}: "
+                        f"{len(ready_chunk)} bytes "
+                        f"(total: {session.total_chunks_sent} chunks, "
+                        f"{session.total_bytes_sent} bytes, queue_size={queue_size})"
+                    )
+                    
+                    # #region agent log
+                    try:
+                        DEBUG_LOG_PATH = Path("/home/sagiri/Code/itss-nihongo/.cursor/debug.log")
+                        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+                            log_entry = {
+                                "timestamp": int(time.time() * 1000),
+                                "location": "session_manager.py:471",
+                                "message": "Chunk queued successfully",
+                                "data": {
+                                    "session_id": session_id,
+                                    "chunk_size": len(ready_chunk),
+                                    "queue_size": queue_size,
+                                    "total_chunks_sent": session.total_chunks_sent
+                                },
+                                "sessionId": "debug-session",
+                                "runId": "run1",
+                                "hypothesisId": "M"
+                            }
+                            f.write(json.dumps(log_entry) + "\n")
+                    except Exception:
+                        pass
+                    # #endregion
                     
                 except queue.Full:
                     logger.error(
@@ -377,13 +520,6 @@ class StreamingSessionManager:
                     )
                     raise StreamInterruptedError(f"Failed to queue audio: {e}")
                 
-                logger.debug(
-                    f"Sent chunk to session {session_id}: "
-                    f"{len(ready_chunk)} bytes "
-                    f"(total: {session.total_chunks_sent} chunks, "
-                    f"{session.total_bytes_sent} bytes)"
-                )
-                
                 # Check if renewal needed
                 if session.should_renew(self.RENEWAL_THRESHOLD_SECONDS):
                     logger.warning(
@@ -394,11 +530,21 @@ class StreamingSessionManager:
                 
                 return True
             
+        except AudioChunkError as e:
+            logger.error(
+                f"Invalid audio chunk for session {session_id}: {e}"
+            )
+            # Don't raise, just log and return False to allow continuation
+            return False
         except Exception as e:
             logger.error(
-                f"Error sending audio chunk to session {session_id}: {e}"
+                f"Error sending audio chunk to session {session_id}: {e}",
+                exc_info=True
             )
-            raise
+            # Only raise for critical errors
+            if session.status == SessionStatus.ERROR:
+                raise StreamInterruptedError(f"Failed to send audio chunk: {e}")
+            return False
     
     def close_session(self, session_id: str) -> dict:
         """

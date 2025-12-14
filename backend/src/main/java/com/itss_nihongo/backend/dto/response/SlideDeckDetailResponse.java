@@ -12,9 +12,14 @@ public class SlideDeckDetailResponse {
     Long id;
     String gcpAssetId;
     String originalName;
+    String processedFileName;
+    String presentationId;
     Integer pageCount;
+    Integer keywordsCount;
+    Boolean hasEmbeddings;
     AssetStatus uploadStatus;
     String contentSummary;
+    String allSummary;
     Instant createdAt;
     String signedUrl;
     List<SlidePageResponse> pages;

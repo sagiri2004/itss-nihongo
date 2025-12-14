@@ -9,9 +9,13 @@ public enum ErrorCode {
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "unauthorized"),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "access_denied"),
     LECTURE_NOT_FOUND(HttpStatus.NOT_FOUND, "lecture_not_found"),
+    RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "resource_not_found"),
     INVALID_FILE_UPLOAD(HttpStatus.BAD_REQUEST, "invalid_file_upload"),
     SLIDE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "slide_upload_failed"),
-    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "internal_error");
+    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "internal_error"),
+    EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "email_already_exists"),
+    INVALID_RESET_TOKEN(HttpStatus.BAD_REQUEST, "invalid_reset_token"),
+    RESET_TOKEN_EXPIRED(HttpStatus.BAD_REQUEST, "reset_token_expired");
 
     private final HttpStatus status;
     private final String messageKey;

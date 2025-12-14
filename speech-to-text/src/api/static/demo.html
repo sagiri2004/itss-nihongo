@@ -170,6 +170,10 @@
       <section>
         <h2>2. Speech-to-Text</h2>
         <div>
+          <label for="lectureIdInput">Lecture ID (required)</label>
+          <input id="lectureIdInput" type="text" placeholder="Enter lecture ID or leave empty for auto-generate" style="width: 100%; padding: 10px; border: 1px solid #30363d; border-radius: 8px; background: #161b22; color: inherit; margin-bottom: 16px;" />
+        </div>
+        <div>
           <label for="languageSelect">Language</label>
           <select id="languageSelect">
             <option value="ja-JP">Japanese (ja-JP)</option>
@@ -240,6 +244,7 @@
       const transcriptLog = document.querySelector("#transcriptLog");
       const languageSelect = document.querySelector("#languageSelect");
       const modelSelect = document.querySelector("#modelSelect");
+      const lectureIdInput = document.querySelector("#lectureIdInput");
 
       let websocket = null;
       let mediaStream = null;
@@ -292,12 +297,169 @@
         return output.buffer;
       }
 
+      // Polyfill for getUserMedia for older browsers
+      function getUserMedia(constraints) {
+        // #region agent log
+        const DEBUG_LOG_URL = 'http://127.0.0.1:7242/ingest/2b24f1d2-cbbe-41fa-9147-751f82eade36';
+        try {
+          fetch(DEBUG_LOG_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: 'demo.html:getUserMedia',
+              message: 'Checking getUserMedia support',
+              data: {
+                hasMediaDevices: !!navigator.mediaDevices,
+                hasGetUserMedia: !!(navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia),
+                userAgent: navigator.userAgent
+              },
+              timestamp: Date.now(),
+              sessionId: 'debug-session',
+              runId: 'run1',
+              hypothesisId: 'A'
+            })
+          }).catch(() => {});
+        } catch (e) {}
+        // #endregion
+
+        // Modern API (Chrome, Firefox, Safari 11+)
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          return navigator.mediaDevices.getUserMedia(constraints);
+        }
+
+        // Legacy API with promise wrapper
+        const getUserMedia = navigator.getUserMedia ||
+                            navigator.webkitGetUserMedia ||
+                            navigator.mozGetUserMedia ||
+                            navigator.msGetUserMedia;
+
+        if (!getUserMedia) {
+          // #region agent log
+          try {
+            fetch(DEBUG_LOG_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: 'demo.html:getUserMedia',
+                message: 'getUserMedia not supported',
+                data: { error: 'getUserMedia is not supported in this browser' },
+                timestamp: Date.now(),
+                sessionId: 'debug-session',
+                runId: 'run1',
+                hypothesisId: 'B'
+              })
+            }).catch(() => {});
+          } catch (e) {}
+          // #endregion
+          return Promise.reject(new Error('getUserMedia is not supported in this browser'));
+        }
+
+        return new Promise((resolve, reject) => {
+          getUserMedia.call(navigator, constraints, resolve, reject);
+        });
+      }
+
       async function startRecording() {
         transcriptLog.innerHTML = "";
+        
+        // #region agent log
+        const DEBUG_LOG_URL = 'http://127.0.0.1:7242/ingest/2b24f1d2-cbbe-41fa-9147-751f82eade36';
         try {
-          mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          fetch(DEBUG_LOG_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: 'demo.html:startRecording',
+              message: 'Starting recording',
+              data: {
+                protocol: location.protocol,
+                host: location.host,
+                isSecure: location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+              },
+              timestamp: Date.now(),
+              sessionId: 'debug-session',
+              runId: 'run1',
+              hypothesisId: 'C'
+            })
+          }).catch(() => {});
+        } catch (e) {}
+        // #endregion
+
+        try {
+          // Check if we're on a secure context (HTTPS or localhost)
+          if (location.protocol !== 'https:' && 
+              location.hostname !== 'localhost' && 
+              location.hostname !== '127.0.0.1' && 
+              location.hostname !== '0.0.0.0') {
+            const errorMsg = 'Microphone access requires HTTPS or localhost. Current: ' + location.protocol + '//' + location.host;
+            recordingStatus.textContent = `Status: ${errorMsg}`;
+            // #region agent log
+            try {
+              fetch(DEBUG_LOG_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  location: 'demo.html:startRecording',
+                  message: 'Insecure context error',
+                  data: { error: errorMsg },
+                  timestamp: Date.now(),
+                  sessionId: 'debug-session',
+                  runId: 'run1',
+                  hypothesisId: 'D'
+                })
+              }).catch(() => {});
+            } catch (e) {}
+            // #endregion
+            return;
+          }
+
+          mediaStream = await getUserMedia({ audio: true, video: false });
+          
+          // #region agent log
+          try {
+            fetch(DEBUG_LOG_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: 'demo.html:startRecording',
+                message: 'getUserMedia success',
+                data: {
+                  tracks: mediaStream.getTracks().length,
+                  trackKind: mediaStream.getTracks()[0]?.kind
+                },
+                timestamp: Date.now(),
+                sessionId: 'debug-session',
+                runId: 'run1',
+                hypothesisId: 'E'
+              })
+            }).catch(() => {});
+          } catch (e) {}
+          // #endregion
         } catch (err) {
-          recordingStatus.textContent = `Status: microphone access denied (${err})`;
+          const errorMsg = err.message || String(err);
+          recordingStatus.textContent = `Status: microphone access denied (${errorMsg})`;
+          
+          // #region agent log
+          try {
+            fetch(DEBUG_LOG_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: 'demo.html:startRecording',
+                message: 'getUserMedia error',
+                data: {
+                  error: errorMsg,
+                  errorName: err.name,
+                  errorStack: err.stack
+                },
+                timestamp: Date.now(),
+                sessionId: 'debug-session',
+                runId: 'run1',
+                hypothesisId: 'F'
+              })
+            }).catch(() => {});
+          } catch (e) {}
+          // #endregion
           return;
         }
         pendingSamples = new Float32Array(0);
@@ -307,10 +469,44 @@
         websocket.addEventListener("open", () => {
           recordingStatus.textContent = "Status: connected";
           sessionId = crypto.randomUUID();
+          
+          // Get lecture_id from input or generate one
+          let lectureId = lectureIdInput.value.trim();
+          if (!lectureId) {
+            lectureId = crypto.randomUUID();
+            lectureIdInput.value = lectureId; // Show generated ID to user
+          }
+          
+          // #region agent log
+          const DEBUG_LOG_URL = 'http://127.0.0.1:7242/ingest/2b24f1d2-cbbe-41fa-9147-751f82eade36';
+          try {
+            fetch(DEBUG_LOG_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: 'demo.html:websocket.open',
+                message: 'Sending start action',
+                data: {
+                  session_id: sessionId,
+                  lecture_id: lectureId,
+                  presentation_id: sessionId,
+                  language_code: languageSelect.value,
+                  model: modelSelect.value
+                },
+                timestamp: Date.now(),
+                sessionId: 'debug-session',
+                runId: 'run1',
+                hypothesisId: 'G'
+              })
+            }).catch(() => {});
+          } catch (e) {}
+          // #endregion
+          
           websocket.send(JSON.stringify({
             action: "start",
             session_id: sessionId,
             presentation_id: sessionId,
+            lecture_id: lectureId,
             language_code: languageSelect.value,
             model: modelSelect.value,
             enable_interim_results: true,
@@ -351,6 +547,7 @@
         const source = audioContext.createMediaStreamSource(mediaStream);
 
         processor = audioContext.createScriptProcessor(2048, 1, 1);
+        let audioChunkCount = 0;
         processor.onaudioprocess = (event) => {
           if (!websocket || websocket.readyState !== WebSocket.OPEN) {
             return;
@@ -371,6 +568,37 @@
             pendingSamples = pendingSamples.slice(TARGET_CHUNK_SAMPLES);
             if (websocket && websocket.readyState === WebSocket.OPEN) {
               const pcm = floatTo16BitPCM(chunkSamples);
+              audioChunkCount++;
+              
+              // #region agent log - Frontend sending audio
+              const DEBUG_LOG_URL = 'http://127.0.0.1:7242/ingest/2b24f1d2-cbbe-41fa-9147-751f82eade36';
+              try {
+                fetch(DEBUG_LOG_URL, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    location: 'demo.html:onaudioprocess',
+                    message: 'Sending audio chunk to WebSocket',
+                    data: {
+                      chunk_number: audioChunkCount,
+                      chunk_size: pcm.byteLength,
+                      websocket_state: websocket.readyState,
+                      samples_count: chunkSamples.length
+                    },
+                    timestamp: Date.now(),
+                    sessionId: 'debug-session',
+                    runId: 'run1',
+                    hypothesisId: 'F'
+                  })
+                }).catch(() => {});
+              } catch (e) {}
+              // #endregion
+              
+              // Log every 10 chunks to avoid spam
+              if (audioChunkCount % 10 === 0) {
+                console.log(`Sent ${audioChunkCount} audio chunks to server`);
+              }
+              
               websocket.send(pcm);
             }
           }

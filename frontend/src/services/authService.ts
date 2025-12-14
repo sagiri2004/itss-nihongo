@@ -1,4 +1,4 @@
-import type { AuthResponse, LoginPayload, RegisterPayload, UserProfile } from '../types/auth'
+import type { AuthResponse, ForgotPasswordPayload, LoginPayload, RegisterPayload, ResetPasswordPayload, UserProfile } from '../types/auth'
 import { httpClient } from './httpClient'
 
 export const authService = {
@@ -10,6 +10,18 @@ export const authService = {
   },
   register(payload: RegisterPayload) {
     return httpClient<AuthResponse>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+  forgotPassword(payload: ForgotPasswordPayload) {
+    return httpClient<void>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+  resetPassword(payload: ResetPasswordPayload) {
+    return httpClient<void>('/api/auth/reset-password', {
       method: 'POST',
       body: JSON.stringify(payload),
     })

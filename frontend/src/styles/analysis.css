@@ -1,0 +1,281 @@
+.recording-analysis-panel {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.analysis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.analysis-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #1e293b;
+}
+
+.analyze-button {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: none;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.875rem;
+}
+
+.analyze-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+}
+
+.analyze-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.analysis-error {
+  padding: 0.75rem;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  color: #991b1b;
+  margin-bottom: 1rem;
+}
+
+/* Speech Rate Section */
+.speech-rate-section {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.speech-rate-section h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+  color: #1e293b;
+}
+
+.speech-rate-stats {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.stat-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.stat-value.slow {
+  color: #f59e0b;
+}
+
+.stat-value.normal {
+  color: #10b981;
+}
+
+.stat-value.fast {
+  color: #ef4444;
+}
+
+.rate-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.rate-badge.slow {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.rate-badge.normal {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.rate-badge.fast {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Chart */
+.speech-rate-chart {
+  margin-top: 1.5rem;
+}
+
+.speech-rate-chart h5 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+.chart-container {
+  background: white;
+  padding: 1rem;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.chart-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.chart-svg {
+  width: 100%;
+  min-width: 600px;
+  height: 200px;
+  max-height: 200px;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+/* Analysis Results */
+.analysis-results {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.analysis-results h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+  color: #1e293b;
+}
+
+.analysis-scores {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.score-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.score-label {
+  font-size: 0.875rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.score-bar {
+  position: relative;
+  height: 32px;
+  background: #f1f5f9;
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
+.score-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  border-radius: 16px;
+  transition: width 0.3s ease;
+}
+
+.score-value {
+  position: relative;
+  z-index: 1;
+  margin-left: auto;
+  margin-right: 0.75rem;
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 0.875rem;
+}
+
+.analysis-feedback,
+.analysis-suggestions {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 6px;
+}
+
+.analysis-feedback h5,
+.analysis-suggestions h5 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+.analysis-feedback p {
+  margin: 0;
+  line-height: 1.6;
+  color: #4b5563;
+}
+
+.analysis-suggestions ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: #4b5563;
+}
+
+.analysis-suggestions li {
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .speech-rate-stats {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .chart-svg {
+    height: 150px;
+  }
+}
+

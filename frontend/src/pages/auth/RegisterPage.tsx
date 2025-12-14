@@ -7,7 +7,7 @@ const RegisterPage = () => {
   const navigate = useNavigate()
   const { register } = useAuth()
   const { t } = useLanguage()
-  const [form, setForm] = useState({ username: '', password: '' })
+  const [form, setForm] = useState({ username: '', password: '', email: '' })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -45,6 +45,19 @@ const RegisterPage = () => {
               required
               value={form.username}
               onChange={(event) => setForm((prev) => ({ ...prev, username: event.target.value }))}
+            />
+          </div>
+        </div>
+        <div className="input-group">
+          <span>{t('auth.register.emailLabel')}</span>
+          <div className="input-wrapper">
+            <input
+              type="email"
+              name="email"
+              placeholder={t('auth.register.emailPlaceholder')}
+              required
+              value={form.email}
+              onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
             />
           </div>
         </div>

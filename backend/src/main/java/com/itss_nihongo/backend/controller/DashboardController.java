@@ -2,6 +2,7 @@ package com.itss_nihongo.backend.controller;
 
 import com.itss_nihongo.backend.dto.response.DashboardSummaryResponse;
 import com.itss_nihongo.backend.service.DashboardService;
+import java.security.Principal;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,8 +21,9 @@ public class DashboardController {
 
     @GetMapping("/summary")
     @PreAuthorize("hasAnyRole('ADMIN','USER')")
-    public DashboardSummaryResponse getSummary(@RequestParam(name = "limit", required = false) Integer limit) {
-        return dashboardService.getSummary(limit);
+    public DashboardSummaryResponse getSummary(@RequestParam(name = "limit", required = false) Integer limit,
+                                               Principal principal) {
+        return dashboardService.getSummary(limit, principal != null ? principal.getName() : null);
     }
 }
 
