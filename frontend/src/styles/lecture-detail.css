@@ -65,12 +65,19 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   padding: 1rem;
   max-width: 100%;
+  overflow: auto;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .slide-canvas-enhanced {
+  display: block;
   max-width: 100%;
   height: auto;
   border-radius: 4px;
+  object-fit: contain;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
 }
 
 .viewer-controls-enhanced {

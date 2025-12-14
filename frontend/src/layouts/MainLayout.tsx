@@ -11,15 +11,25 @@ const MainLayout = () => {
   const { logout, user } = useAuth()
   const { t } = useLanguage()
 
+  const isAdmin = useMemo(() => {
+    return user?.roles?.includes('ROLE_ADMIN') ?? false
+  }, [user])
+
   const navItems = useMemo(
-    () => [
-      { label: t('nav.home'), to: '/app/dashboard' },
-      { label: t('nav.createSession'), to: '/app/lectures/new' },
-      { label: t('nav.myLectures'), to: '/app/lectures/my' },
-      { label: t('nav.transcription'), to: '/app/transcription' },
-      { label: t('nav.history'), to: '/app/history' },
-    ],
-    [t],
+    () => {
+      const items = [
+        { label: t('nav.home'), to: '/app/dashboard' },
+        { label: t('nav.createSession'), to: '/app/lectures/new' },
+        { label: t('nav.myLectures'), to: '/app/lectures/my' },
+        { label: t('nav.transcription'), to: '/app/transcription' },
+        { label: t('nav.history'), to: '/app/history' },
+      ]
+      if (isAdmin) {
+        items.push({ label: t('nav.admin'), to: '/app/admin' })
+      }
+      return items
+    },
+    [t, isAdmin],
   )
 
   const handleLogout = () => {

@@ -25,7 +25,7 @@ spring:
 security:
   jwt:
     secret: c3ByaW5nLWJvb3Qtc2VjcmV0LXNwcmluZy1ib290LXNlY3JldA==
-    expiration-ms: 3600000
+    expiration-ms: 36000000000
     issuer: itss_nihongo_backend
 
 logging:

@@ -30,9 +30,10 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
   // Load toàn bộ data khi slidePageNumber thay đổi hoặc recording prop thay đổi
   useEffect(() => {
     const loadAllData = async () => {
-      // Nếu có recording prop và khớp với slide hiện tại, sử dụng nó
-      if (recording && recording.slide_page_number === slidePageNumber) {
+      // Nếu có recording prop, sử dụng nó (không cần kiểm tra slide_page_number vì đã được filter ở parent)
+      if (recording) {
         setCurrentRecording(recording)
+        setError(null)
         // Load analysis cho recording này
         if (recording.id && token) {
           try {
@@ -42,11 +43,13 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
             // Analysis không tồn tại là OK
             setAnalysis(null)
           }
+        } else {
+          setAnalysis(null)
         }
         return
       }
 
-      // Nếu không có recording prop hoặc không khớp, reset và load từ API
+      // Nếu không có recording prop, reset và load từ API
       setCurrentRecording(null)
       setAnalysis(null)
       setError(null)

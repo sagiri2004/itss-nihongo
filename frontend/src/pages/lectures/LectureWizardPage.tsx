@@ -322,16 +322,18 @@ const LectureWizardPage = () => {
   const currentPageSummary = currentPage?.summary ?? currentPage?.contentSummary ?? null
 
   return (
-    <div className="lecture-wizard">
-      <section className="wizard-header">
+    <>
+      <section className="page-hero">
         <div>
           <p className="topbar__bread">{t('lectureWizard.breadcrumb')}</p>
           <h1>{t('lectureWizard.title')}</h1>
         </div>
       </section>
 
-      {/* Step Indicator */}
-      <div className="wizard-steps">
+      <section className="page-content-wrapper">
+        <div className="page-content-container lecture-wizard">
+          {/* Step Indicator */}
+          <div className="wizard-steps" data-step={currentStep}>
         <div className={`step-indicator ${currentStep >= 1 ? 'active' : ''} ${currentStep > 1 ? 'completed' : ''}`}>
           <div className="step-number">1</div>
           <div className="step-label">{t('lectureWizard.steps.create')}</div>
@@ -546,7 +548,9 @@ const LectureWizardPage = () => {
           </div>
         </div>
       )}
-    </div>
+        </div>
+      </section>
+    </>
   )
 }
 

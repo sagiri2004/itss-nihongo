@@ -58,4 +58,26 @@ export type LectureDetail = Lecture & {
   slideDeck?: SlideDeckDetail | null
 }
 
+export type FinalAnalysisResponse = {
+  id?: number | null
+  lectureId: number
+  overallScore: number | null
+  overallFeedback: string | null
+  contentCoverage: number | null
+  structureQuality: number | null
+  clarityScore: number | null
+  engagementScore: number | null
+  timeManagement: number | null
+  slideAnalyses: Array<{
+    slidePageNumber: number
+    score: number | null
+    feedback: string | null
+    strengths: string[]
+    improvements: string[]
+  }>
+  strengths: string[]
+  improvements: string[]
+  recommendations: string[]
+}
+
 

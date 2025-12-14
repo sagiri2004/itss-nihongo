@@ -3,7 +3,7 @@ import { httpClient } from './httpClient'
 export type SlideRecordingMessage = {
   id?: string
   text: string
-  relativeTimeSec: number
+  relative_time_sec: number
   timestamp: number
 }
 

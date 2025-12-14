@@ -83,8 +83,9 @@ const SlideUploadPage = () => {
         </div>
       </section>
 
-      <section className="form-section">
-        <form className="form-grid" onSubmit={handleSubmit}>
+      <section className="page-content-wrapper">
+        <div className="page-content-container">
+          <form className="form-grid" onSubmit={handleSubmit}>
           <label>
             {t('slides.lectureId')}
             <input
@@ -127,10 +128,9 @@ const SlideUploadPage = () => {
             </button>
           </div>
         </form>
-      </section>
 
-      {recentUpload && (
-        <section className="form-section">
+        {recentUpload && (
+          <div className="form-section">
           <h2>{t('slides.history')}</h2>
           <ul className="upload-list">
             <li>
@@ -178,8 +178,10 @@ const SlideUploadPage = () => {
               <strong>{formatBoolean(recentUpload.hasEmbeddings)}</strong>
             </li>
           </ul>
-        </section>
-      )}
+          </div>
+        )}
+        </div>
+      </section>
     </>
   )
 }

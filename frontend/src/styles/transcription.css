@@ -152,6 +152,113 @@
   border: 1px solid #2563eb;
 }
 
+/* Transcription Layout - Side by Side */
+.transcription-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+/* Messages Section */
+.transcription-messages-section {
+  background: #fff;
+  border-radius: var(--radius-md, 16px);
+  padding: clamp(24px, 3vw, 32px);
+  box-shadow: var(--shadow-soft, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 600px;
+}
+
+.transcription-messages-section h2 {
+  margin: 0 0 1.5rem;
+  font-size: 1.25rem;
+  color: var(--text-strong, #1f2937);
+  font-weight: 600;
+}
+
+/* Chat Feed Compact (from SlideTranscriptionPanel) */
+.chat-feed-compact {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-right: 0.5rem;
+  min-height: 0;
+}
+
+.chat-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.9375rem;
+}
+
+.chat-bubble-compact {
+  align-self: flex-start;
+  background: white;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  max-width: 85%;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  border: 1px solid #e5e7eb;
+}
+
+.chat-bubble-compact p {
+  margin: 0 0 0.375rem;
+  color: #111827;
+  line-height: 1.5;
+  font-size: 0.9375rem;
+}
+
+.chat-bubble-compact .chat-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.375rem;
+}
+
+.chat-bubble-compact .chat-meta {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.chat-bubble-compact.interim {
+  background: #dbeafe;
+  border-color: #3b82f6;
+}
+
+.chat-bubble-compact.interim p {
+  color: #1e40af;
+  font-style: italic;
+}
+
+/* Recorder Card adjustments */
+.recorder-card {
+  position: sticky;
+  top: 2rem;
+}
+
+@media (max-width: 1024px) {
+  .transcription-layout {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .recorder-card {
+    position: static;
+  }
+
+  .transcription-messages-section {
+    min-height: 400px;
+  }
+}
+
 @media (max-width: 768px) {
   .transcription-controls {
     flex-direction: column;
@@ -169,6 +276,10 @@
 
   .chat-bubble {
     max-width: 100%;
+  }
+
+  .chat-bubble-compact {
+    max-width: 95%;
   }
 }
 

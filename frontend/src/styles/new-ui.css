@@ -370,15 +370,33 @@ button {
 
 .page-container {
   width: var(--container-width);
+  max-width: 1200px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 40px;
 }
 
 .page-hero {
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 18px;
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  padding: clamp(32px, 5vw, 48px);
+  box-shadow: var(--shadow-soft);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+/* White content container - matches page-hero width */
+.page-content-wrapper {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-content-container {
   background: #ffffff;
   border-radius: var(--radius-lg);
   padding: clamp(32px, 5vw, 48px);
@@ -396,6 +414,18 @@ button {
   margin: 0;
   font-size: 13px;
   color: var(--text-muted);
+}
+
+.topbar__bread .breadcrumb-link {
+  color: var(--primary-color);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.topbar__bread .breadcrumb-link:hover {
+  color: var(--primary-color-dark);
+  text-decoration: underline;
 }
 
 .page-hero .secondary-action {
@@ -883,6 +913,26 @@ button {
 .recorder-actions {
   display: flex;
   gap: 16px;
+}
+
+.danger-button {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.danger-button:hover {
+  background: #dc2626;
+}
+
+.danger-button:disabled {
+  background: #fca5a5;
+  cursor: not-allowed;
 }
 
 .link-button {

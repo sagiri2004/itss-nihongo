@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from .routers import slides, transcription, analytics, speech_proxy, analysis
+from .routers import slides, transcription, analytics, speech_proxy, analysis, final_analysis
 
 logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent
@@ -123,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
     app.include_router(speech_proxy.router, prefix="/proxy", tags=["speech-proxy"])
     app.include_router(analysis.router, prefix="/analysis", tags=["analysis"])
+    app.include_router(final_analysis.router, prefix="/final-analysis", tags=["final-analysis"])
 
     static_dir = BASE_DIR / "static"
     if static_dir.exists():

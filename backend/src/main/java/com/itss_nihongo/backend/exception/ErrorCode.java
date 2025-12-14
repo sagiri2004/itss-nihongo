@@ -15,7 +15,8 @@ public enum ErrorCode {
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "internal_error"),
     EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "email_already_exists"),
     INVALID_RESET_TOKEN(HttpStatus.BAD_REQUEST, "invalid_reset_token"),
-    RESET_TOKEN_EXPIRED(HttpStatus.BAD_REQUEST, "reset_token_expired");
+    RESET_TOKEN_EXPIRED(HttpStatus.BAD_REQUEST, "reset_token_expired"),
+    INVALID_REQUEST(HttpStatus.BAD_REQUEST, "invalid_request");
 
     private final HttpStatus status;
     private final String messageKey;

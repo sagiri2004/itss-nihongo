@@ -205,7 +205,7 @@ const SlideTranscriptionPanel = ({ lectureId, slidePageNumber, keywords = [], on
           }
           return {
             text: msg.text,
-            relativeTimeSec: Math.max(0, relativeTimeSec), // Đảm bảo không âm
+            relative_time_sec: Math.max(0, relativeTimeSec), // Đảm bảo không âm, sử dụng snake_case
             timestamp: msg.timestamp,
           }
         }),

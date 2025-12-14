@@ -101,7 +101,7 @@ public class SlideRecordingServiceImpl implements SlideRecordingService {
 
         LectureStatus newStatus;
         if (allSlidesRecorded) {
-            newStatus = LectureStatus.COMPLETED;
+            newStatus = LectureStatus.ANALYZING; // Chuyển sang giai đoạn phân tích tổng hợp
         } else if (isFirstRecording || oldStatus == LectureStatus.SLIDE_UPLOAD) {
             newStatus = LectureStatus.RECORDING;
         } else {

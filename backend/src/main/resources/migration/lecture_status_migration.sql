@@ -13,5 +13,5 @@ UPDATE lectures SET status = 'COMPLETED' WHERE status = 'PUBLISHED';
 UPDATE lectures SET status = 'INFO_INPUT' WHERE status = 'FAILED';
 
 -- Step 3: Convert back to enum with new values
-ALTER TABLE lectures MODIFY COLUMN status ENUM('INFO_INPUT', 'SLIDE_UPLOAD', 'RECORDING', 'COMPLETED') NOT NULL;
+ALTER TABLE lectures MODIFY COLUMN status ENUM('INFO_INPUT', 'SLIDE_UPLOAD', 'RECORDING', 'ANALYZING', 'COMPLETED') NOT NULL;
 

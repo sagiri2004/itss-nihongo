@@ -29,12 +29,9 @@ const CHUNK_SIZE = 3200
 const CHUNK_INTERVAL_MS = 100
 
 const RealtimeTranscriptionPage = () => {
-  const { t } = useLanguage()
-  const [lectureIdInput, setLectureIdInput] = useState<string>('')
+  const { t, language } = useLanguage()
   const [mode, setMode] = useState<Mode>('microphone')
   const [isRecording, setIsRecording] = useState(false)
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const [presentationId, setPresentationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [interimText, setInterimText] = useState<string>('')
   const [errorState, setErrorState] = useState<ErrorState | null>(null)
@@ -42,6 +39,8 @@ const RealtimeTranscriptionPage = () => {
   const [fileInfo, setFileInfo] = useState<{ name: string; sizeKB: number; sampleRate?: number; bitsPerSample?: number } | null>(null)
   const [fileWarningState, setFileWarningState] = useState<LocalizedMessage | null>(null)
   const [languageCode, setLanguageCode] = useState<string>('ja-JP')
+  const [elapsedTime, setElapsedTime] = useState<number>(0)
+  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null)
 
   const clientRef = useRef<ReturnType<typeof createTranscriptionClient> | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
@@ -50,27 +49,43 @@ const RealtimeTranscriptionPage = () => {
   const micSourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null)
   const pendingMicSamplesRef = useRef<number[]>([])
   const micStartSentRef = useRef(false)
-  const micLectureIdRef = useRef<number | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const chatFeedRef = useRef<HTMLDivElement | null>(null)
   const fileBufferRef = useRef<ArrayBuffer | null>(null)
   const fileStreamRef = useRef<FileStreamState | null>(null)
   const shouldStreamFileRef = useRef(false)
   const isRecordingRef = useRef(false)
 
-  const lectureId = useMemo(() => {
-    const parsed = Number(lectureIdInput)
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
-  }, [lectureIdInput])
-
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    if (chatFeedRef.current) {
+      chatFeedRef.current.scrollTop = chatFeedRef.current.scrollHeight
     }
   }, [messages, interimText])
 
   useEffect(() => {
     isRecordingRef.current = isRecording
   }, [isRecording])
+
+  // Timer for recording duration
+  useEffect(() => {
+    let intervalId: number | null = null
+    if (isRecording && recordingStartTime) {
+      intervalId = window.setInterval(() => {
+        const now = Date.now()
+        const elapsed = Math.floor((now - recordingStartTime) / 1000)
+        setElapsedTime(elapsed)
+      }, 1000)
+    } else {
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    }
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    }
+  }, [isRecording, recordingStartTime])
 
   useEffect(() => {
     return () => {
@@ -79,6 +94,21 @@ const RealtimeTranscriptionPage = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Format time MM:SS
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+  // Calculate speaking rate (characters per minute)
+  const speakingRate = useMemo(() => {
+    if (!isRecording || elapsedTime === 0) return 0
+    const totalChars = messages.reduce((sum, msg) => sum + msg.text.length, 0)
+    const minutes = elapsedTime / 60
+    return minutes > 0 ? Math.round(totalChars / minutes) : 0
+  }, [messages, elapsedTime, isRecording])
 
   const statusText = t(statusState.key, statusState.params)
   const error = errorState ? ('key' in errorState ? t(errorState.key, errorState.params) : errorState.message) : null
@@ -196,27 +226,18 @@ const RealtimeTranscriptionPage = () => {
         return
       }
 
-      // For new proxy endpoint, we don't need to send start after first chunk
-      // Language is already sent on open
-      // But keep this for backward compatibility with old endpoint
       if (
         sent &&
         !micStartSentRef.current &&
-        micLectureIdRef.current !== null &&
         clientRef.current.readyState() === WebSocket.OPEN
       ) {
         micStartSentRef.current = true
-        // Only send start if using old endpoint (has lectureId)
-        // New proxy endpoint doesn't need this
         try {
           clientRef.current.start({
-            lectureId: micLectureIdRef.current,
-            presentationId: presentationId ?? undefined,
             language: languageCode,
             enableInterimResults: true,
           })
         } catch (e) {
-          // Ignore if endpoint doesn't support it
           console.log('Start command not needed for this endpoint')
         }
         setStatusState({ key: 'transcription.status.sendingFirstChunk' })
@@ -282,6 +303,8 @@ const RealtimeTranscriptionPage = () => {
       setStatusState({ key: 'transcription.status.recording' })
       setIsRecording(true)
       isRecordingRef.current = true
+      setRecordingStartTime(Date.now())
+      setElapsedTime(0)
     } catch (err) {
       console.error(err)
       await cleanupMicrophone()
@@ -416,30 +439,12 @@ const RealtimeTranscriptionPage = () => {
   const handleSocketEvent = (payload: TranscriptionEventMessage) => {
     switch (payload.event) {
       case 'session_started':
-        if ('session_id' in payload && typeof payload.session_id === 'string') {
-          setSessionId(payload.session_id)
-          setStatusState({
-            key: 'transcription.status.sessionStarted',
-            params: { sessionId: payload.session_id },
-          })
-        }
-        if ('presentation_id' in payload && typeof payload.presentation_id === 'string') {
-          setPresentationId(payload.presentation_id)
-        }
         if (mode === 'file' && shouldStreamFileRef.current && fileStreamRef.current) {
           setStatusState({ key: 'transcription.status.sessionReadyForFile' })
           beginStreamingFile()
         }
         break
       case 'session_closed':
-        if ('session_id' in payload && typeof payload.session_id === 'string') {
-          setStatusState({
-            key: 'transcription.status.sessionClosed',
-            params: { sessionId: payload.session_id },
-          })
-        }
-        setSessionId(null)
-        setPresentationId(null)
         clearFileStreaming()
         if (mode === 'microphone') {
           pendingMicSamplesRef.current = []
@@ -477,13 +482,12 @@ const RealtimeTranscriptionPage = () => {
     }
   }
 
-  const startMicrophoneRecording = async (lectureIdValue: number) => {
+  const startMicrophoneRecording = async () => {
     setErrorState(null)
     setStatusState({ key: 'transcription.status.socketConnecting' })
     shouldStreamFileRef.current = false
     pendingMicSamplesRef.current = []
     micStartSentRef.current = false
-    micLectureIdRef.current = lectureIdValue
 
     await cleanupMicrophone()
 
@@ -496,7 +500,6 @@ const RealtimeTranscriptionPage = () => {
     clientRef.current = createTranscriptionClient({
       onEvent: handleSocketEvent,
       onOpen: () => {
-        // Send language config for new proxy endpoint
         if (clientRef.current) {
           clientRef.current.start({
             language: languageCode,
@@ -516,7 +519,6 @@ const RealtimeTranscriptionPage = () => {
         setErrorState({ key: 'transcription.errors.websocketError' })
         pendingMicSamplesRef.current = []
         micStartSentRef.current = false
-        micLectureIdRef.current = null
         void cleanupMicrophone()
       },
       onClose: () => {
@@ -524,13 +526,14 @@ const RealtimeTranscriptionPage = () => {
         setIsRecording(false)
         void cleanupMicrophone()
         micStartSentRef.current = false
-        micLectureIdRef.current = null
         clientRef.current = null
+        setRecordingStartTime(null)
+        setElapsedTime(0)
       },
     })
   }
 
-  const startFileStreaming = (lectureIdValue: number) => {
+  const startFileStreaming = () => {
     if (!fileBufferRef.current) {
       setErrorState({ key: 'transcription.errors.fileRequired' })
       return
@@ -543,6 +546,14 @@ const RealtimeTranscriptionPage = () => {
       clientRef.current = null
       clientRef.current = createTranscriptionClient({
         onEvent: handleSocketEvent,
+        onOpen: () => {
+          if (clientRef.current) {
+            clientRef.current.start({
+              language: languageCode,
+              enableInterimResults: true,
+            })
+          }
+        },
         onError: () => setErrorState({ key: 'transcription.errors.websocketError' }),
         onClose: () => {
           setIsRecording(false)
@@ -577,12 +588,9 @@ const RealtimeTranscriptionPage = () => {
         setStatusState({ key: 'transcription.status.fileSessionStarting' })
       }
 
-      clientRef.current.start({
-        lectureId: lectureIdValue,
-        presentationId: presentationId ?? undefined,
-        enableInterimResults: true,
-      })
       setIsRecording(true)
+      setRecordingStartTime(Date.now())
+      setElapsedTime(0)
     } catch (errorStarting) {
       console.error(errorStarting)
       setErrorState({ key: 'transcription.errors.fileStartFailed' })
@@ -595,16 +603,12 @@ const RealtimeTranscriptionPage = () => {
     if (isRecording) {
       return
     }
-    if (!lectureId) {
-      setErrorState({ key: 'transcription.errors.lectureIdRequired' })
-      return
-    }
 
     setErrorState(null)
     if (mode === 'file') {
-      startFileStreaming(lectureId)
+      startFileStreaming()
     } else {
-      await startMicrophoneRecording(lectureId)
+      await startMicrophoneRecording()
     }
   }
 
@@ -615,7 +619,6 @@ const RealtimeTranscriptionPage = () => {
       void cleanupMicrophone()
       pendingMicSamplesRef.current = []
       micStartSentRef.current = false
-      micLectureIdRef.current = null
     } else {
       clearFileStreaming()
     }
@@ -637,6 +640,8 @@ const RealtimeTranscriptionPage = () => {
     setIsRecording(false)
     isRecordingRef.current = false
     setStatusState({ key: 'transcription.status.stopped' })
+    setRecordingStartTime(null)
+    setElapsedTime(0)
   }
 
   const resetTranscript = () => {
@@ -647,6 +652,8 @@ const RealtimeTranscriptionPage = () => {
     setMessages([])
     setInterimText('')
     setStatusState({ key: 'transcription.status.cleared' })
+    setRecordingStartTime(null)
+    setElapsedTime(0)
   }
 
   return (
@@ -658,117 +665,133 @@ const RealtimeTranscriptionPage = () => {
         </div>
       </section>
 
-      <section className="recorder-card">
-        <div className="recorder-wave">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3z" />
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M19 11a7 7 0 01-14 0m7 7v3m-4 0h8"
-            />
-          </svg>
-        </div>
-        <p className="recorder-timer">{statusText}</p>
+      <section className="page-content-wrapper">
+        <div className="page-content-container">
+          <div className="transcription-layout">
+            {/* Recorder Card - Left Side */}
+            <div className="recorder-card">
+              <div className="recorder-wave">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3z" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19 11a7 7 0 01-14 0m7 7v3m-4 0h8"
+                  />
+                </svg>
+              </div>
+              <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+                <p className="recorder-timer" style={{ fontSize: isRecording ? '2rem' : '1.5rem', marginBottom: '0.5rem' }}>
+                  {isRecording ? formatTime(elapsedTime) : statusText}
+                </p>
+                {isRecording && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
+                    <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                      {t('transcription.status.recording')}
+                    </p>
+                    {speakingRate > 0 && (
+                      <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {language === 'ja' 
+                          ? `話速: ${speakingRate} 文字/分`
+                          : language === 'vi'
+                          ? `Tốc độ: ${speakingRate} ký tự/phút`
+                          : `Speed: ${speakingRate} chars/min`}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
 
-        <div className="form-grid">
-          <label>
-            {t('transcription.labels.lectureId')}
-            <input
-              id="lectureId"
-              type="number"
-              min={1}
-              placeholder={t('transcription.placeholders.lectureId')}
-              value={lectureIdInput}
-              onChange={(event) => setLectureIdInput(event.target.value)}
-              disabled={isRecording}
-            />
-          </label>
+              <div className="form-grid">
+                <label>
+                  {language === 'ja' ? '言語' : language === 'vi' ? 'Ngôn ngữ' : 'Language'}
+                  <select
+                    value={languageCode}
+                    onChange={(event) => setLanguageCode(event.target.value)}
+                    disabled={isRecording}
+                  >
+                    <option value="ja-JP">🇯🇵 日本語 (Japanese)</option>
+                    <option value="vi-VN">🇻🇳 Tiếng Việt (Vietnamese)</option>
+                    <option value="en-US">🇺🇸 English (Tiếng Anh)</option>
+                  </select>
+                </label>
 
-          <label>
-            Ngôn ngữ / Language
-            <select
-              value={languageCode}
-              onChange={(event) => setLanguageCode(event.target.value)}
-              disabled={isRecording}
-            >
-              <option value="ja-JP">🇯🇵 Tiếng Nhật (Japanese)</option>
-              <option value="vi-VN">🇻🇳 Tiếng Việt (Vietnamese)</option>
-              <option value="en-US">🇺🇸 Tiếng Anh (English)</option>
-            </select>
-          </label>
+                <label>
+                  {t('transcription.labels.mode')}
+                  <select
+                    value={mode}
+                    onChange={(event) => setMode(event.target.value as 'microphone' | 'file')}
+                    disabled={isRecording}
+                  >
+                    <option value="microphone">{t('transcription.modes.microphone')}</option>
+                    <option value="file">{t('transcription.modes.file')}</option>
+                  </select>
+                </label>
 
-          <label>
-            {t('transcription.labels.mode')}
-            <select
-              value={mode}
-              onChange={(event) => setMode(event.target.value as 'microphone' | 'file')}
-              disabled={isRecording}
-            >
-              <option value="microphone">{t('transcription.modes.microphone')}</option>
-              <option value="file">{t('transcription.modes.file')}</option>
-            </select>
-          </label>
+                {mode === 'file' && (
+                  <label>
+                    {t('transcription.labels.fileInput')}
+                    <input
+                      id="audioFile"
+                      type="file"
+                      accept="audio/wav,audio/x-wav,audio/*"
+                      disabled={isRecording}
+                      onChange={handleFileChange}
+                    />
+                    {fileMeta && <small>{fileMeta}</small>}
+                    {fileWarning && <p className="form-error">⚠️ {fileWarning}</p>}
+                  </label>
+                )}
+              </div>
 
-          {mode === 'file' && (
-            <label>
-              {t('transcription.labels.fileInput')}
-              <input
-                id="audioFile"
-                type="file"
-                accept="audio/wav,audio/x-wav,audio/*"
-                disabled={isRecording}
-                onChange={handleFileChange}
-              />
-              {fileMeta && <small>{fileMeta}</small>}
-              {fileWarning && <p className="form-error">⚠️ {fileWarning}</p>}
-            </label>
-          )}
-        </div>
+              <div className="recorder-actions">
+                <button type="button" className="recorder-button" onClick={startRecording} disabled={isRecording}>
+                  ●
+                </button>
+                <button type="button" className="secondary-button" onClick={stopRecording} disabled={!isRecording}>
+                  {t('transcription.buttons.stop')}
+                </button>
+                <button type="button" className="link-button" onClick={resetTranscript}>
+                  {t('transcription.buttons.reset')}
+                </button>
+              </div>
 
-        <div className="recorder-actions">
-          <button type="button" className="recorder-button" onClick={startRecording} disabled={isRecording}>
-            ●
-          </button>
-          <button type="button" className="secondary-button" onClick={stopRecording} disabled={!isRecording}>
-            {t('transcription.buttons.stop')}
-          </button>
-          <button type="button" className="link-button" onClick={resetTranscript}>
-            {t('transcription.buttons.reset')}
-          </button>
-        </div>
-
-        {sessionId && (
-          <p>
-            {t('transcription.session.label')} {sessionId}
-            {presentationId && ` · ${t('transcription.session.presentation', { id: presentationId })}`}
-          </p>
-        )}
-        {error && <p className="form-error">⚠️ {error}</p>}
-      </section>
-
-      <section className="form-section">
-        <h2>{t('transcription.chatTitle')}</h2>
-        <div className="chat-feed">
-          {messages.map((message) => (
-            <div className="chat-bubble" key={message.id}>
-              <p>{message.text}</p>
-              {typeof message.confidence === 'number' && (
-                <span className="chat-meta">
-                  {t('transcription.chat.confidence', {
-                    confidence: (message.confidence * 100).toFixed(1),
-                  })}
-                </span>
-              )}
+              {error && <p className="form-error">⚠️ {error}</p>}
             </div>
-          ))}
-          {interimText && (
-            <div className="chat-bubble interim">
-              <p>{interimText}</p>
-              <span className="chat-meta">{t('transcription.chat.processing')}</span>
+
+            {/* Messages Section - Right Side */}
+            <div className="transcription-messages-section">
+              <h2>{t('transcription.chatTitle')}</h2>
+              <div className="chat-feed-compact" ref={chatFeedRef}>
+                {messages.length === 0 && !interimText && (
+                  <div className="chat-empty">
+                    <p>{t('transcription.chat.empty')}</p>
+                  </div>
+                )}
+                {messages.map((message) => (
+                  <div className="chat-bubble-compact" key={message.id}>
+                    <p>{message.text}</p>
+                    {typeof message.confidence === 'number' && (
+                      <div className="chat-meta-row">
+                        <span className="chat-meta">
+                          {t('transcription.chat.confidence', {
+                            confidence: (message.confidence * 100).toFixed(1),
+                          })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {interimText && (
+                  <div className="chat-bubble-compact interim">
+                    <p>{interimText}</p>
+                    <span className="chat-meta">{t('transcription.chat.processing')}</span>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
             </div>
-          )}
-          <div ref={messagesEndRef} />
+          </div>
         </div>
       </section>
     </>
@@ -776,6 +799,3 @@ const RealtimeTranscriptionPage = () => {
 }
 
 export default RealtimeTranscriptionPage
-
-
-

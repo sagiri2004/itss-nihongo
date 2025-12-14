@@ -12,9 +12,11 @@ import IntroPage from './pages/intro/IntroPage'
 import SlideUploadPage from './pages/slides/SlideUploadPage'
 import LectureWizardPage from './pages/lectures/LectureWizardPage'
 import LectureDetailPage from './pages/lectures/LectureDetailPage'
+import LectureAnalysisPage from './pages/lectures/LectureAnalysisPage'
 import MyLecturesPage from './pages/lectures/MyLecturesPage'
 import HistoryPage from './pages/history/HistoryPage'
 import RealtimeTranscriptionPage from './pages/transcription/RealtimeTranscriptionPage'
+import AdminPage from './pages/admin/AdminPage'
 import './styles/layouts.css'
 import './styles/dashboard.css'
 import './styles/new-ui.css'
@@ -45,9 +47,11 @@ function App() {
               <Route path="new" element={<LectureWizardPage />} />
               <Route path="my" element={<MyLecturesPage />} />
               <Route path=":lectureId" element={<LectureDetailPage />} />
+              <Route path=":lectureId/analysis" element={<LectureAnalysisPage />} />
             </Route>
             <Route path="history" element={<HistoryPage />} />
             <Route path="transcription" element={<RealtimeTranscriptionPage />} />
+            <Route path="admin" element={<AdminPage />} />
           </Route>
         </Route>
 

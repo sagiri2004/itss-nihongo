@@ -18,6 +18,9 @@ type PdfRenderTask = {
 }
 
 const VIEWER_SCALE = 1.2
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 3.0
+const ZOOM_STEP = 0.25
 
 const LectureDetailPage = () => {
   const { lectureId } = useParams<{ lectureId: string }>()
@@ -33,8 +36,13 @@ const LectureDetailPage = () => {
   const [isPdfLoading, setIsPdfLoading] = useState(false)
   const [totalPages, setTotalPages] = useState(0)
   const [savedRecording, setSavedRecording] = useState<any>(null)
+  const [zoom, setZoom] = useState(1.0)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
   const pdfRef = useRef<PDFDocumentProxy | null>(null)
   const renderTaskRef = useRef<PdfRenderTask | null>(null)
 
@@ -142,15 +150,16 @@ const LectureDetailPage = () => {
     try {
       setIsPdfLoading(true)
       const page = await pdf.getPage(pageNumber)
-      const viewport = page.getViewport({ scale: VIEWER_SCALE })
+      const baseViewport = page.getViewport({ scale: VIEWER_SCALE })
+      const scaledViewport = page.getViewport({ scale: VIEWER_SCALE * zoom })
       const context = canvas.getContext('2d')
       if (!context) return
 
       const outputScale = window.devicePixelRatio || 1
-      canvas.width = viewport.width * outputScale
-      canvas.height = viewport.height * outputScale
-      canvas.style.width = `${viewport.width}px`
-      canvas.style.height = `${viewport.height}px`
+      canvas.width = scaledViewport.width * outputScale
+      canvas.height = scaledViewport.height * outputScale
+      canvas.style.width = `${scaledViewport.width}px`
+      canvas.style.height = `${scaledViewport.height}px`
 
       const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined
 
@@ -158,7 +167,7 @@ const LectureDetailPage = () => {
 
       const renderTask = page.render({
         canvasContext: context,
-        viewport,
+        viewport: scaledViewport,
         transform,
       })
       renderTaskRef.current = renderTask
@@ -171,6 +180,60 @@ const LectureDetailPage = () => {
     } finally {
       setIsPdfLoading(false)
     }
+  }
+
+  // Không reset zoom và pan khi chuyển trang - giữ nguyên settings
+
+  // Re-render when zoom changes
+  useEffect(() => {
+    if (pdfRef.current) {
+      renderPage(currentPageIndex + 1)
+    }
+  }, [zoom])
+
+  const handleZoomIn = () => {
+    setZoom((prev) => Math.min(prev + ZOOM_STEP, MAX_ZOOM))
+  }
+
+  const handleZoomOut = () => {
+    setZoom((prev) => Math.max(prev - ZOOM_STEP, MIN_ZOOM))
+  }
+
+  const handleZoomReset = () => {
+    setZoom(1.0)
+    setPan({ x: 0, y: 0 })
+  }
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault()
+      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
+      setZoom((prev) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prev + delta)))
+    }
+  }
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (zoom > 1.0) {
+      setIsDragging(true)
+      setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y })
+    }
+  }
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isDragging && zoom > 1.0) {
+      setPan({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y,
+      })
+    }
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+  }
+
+  const handleMouseLeave = () => {
+    setIsDragging(false)
   }
 
   const slideDeck = lecture?.slideDeck
@@ -191,6 +254,7 @@ const LectureDetailPage = () => {
       INFO_INPUT: t('myLectures.status.INFO_INPUT'),
       SLIDE_UPLOAD: t('myLectures.status.SLIDE_UPLOAD'),
       RECORDING: t('myLectures.status.RECORDING'),
+      ANALYZING: t('myLectures.status.ANALYZING'),
       COMPLETED: t('myLectures.status.COMPLETED'),
     }),
     [t],
@@ -220,6 +284,11 @@ const LectureDetailPage = () => {
   useEffect(() => {
     setSavedRecording(null)
   }, [currentPageIndex])
+
+  // Handler khi recording được lưu
+  const handleRecordingSaved = (recording: any) => {
+    setSavedRecording(recording)
+  }
 
   const handlePrev = () => {
     setCurrentPageIndex((prev) => Math.max(prev - 1, 0))
@@ -282,14 +351,25 @@ const LectureDetailPage = () => {
           )}
         </div>
         <div className="hero-actions">
+          {(lecture?.status === 'ANALYZING' || lecture?.status === 'COMPLETED') && (
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => navigate(`/app/lectures/${numericLectureId}/analysis`)}
+            >
+              📊 {t('lectureDetail.finalAnalysis.title')}
+            </button>
+          )}
           <button type="button" className="secondary-button" onClick={navigateToUpload}>
             {t('lectureDetail.actions.upload')}
           </button>
         </div>
       </section>
 
-      {/* Main Content: Slide Viewer + Transcription Side by Side */}
-      <section className="lecture-detail-main-grid">
+      <section className="page-content-wrapper">
+        <div className="page-content-container">
+          {/* Main Content: Slide Viewer + Transcription Side by Side */}
+          <div className="lecture-detail-main-grid">
         {/* Left: Slide Viewer */}
         <div className="slide-viewer-card-enhanced">
           <header className="slide-viewer-header-enhanced">
@@ -309,7 +389,20 @@ const LectureDetailPage = () => {
               <div className="viewer-placeholder">{viewerStateMessage}</div>
             ) : (
               <>
-                <div className="slide-canvas-container">
+                <div
+                  ref={containerRef}
+                  className="slide-canvas-container"
+                  onWheel={handleWheel}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseLeave}
+                  style={{
+                    cursor: zoom > 1.0 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                    transform: `translate(${pan.x}px, ${pan.y}px)`,
+                    transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                  }}
+                >
                   <canvas ref={canvasRef} className="slide-canvas-enhanced" />
                   {isPdfLoading && <div className="viewer-loading">{t('common.loading')}</div>}
                 </div>
@@ -318,25 +411,59 @@ const LectureDetailPage = () => {
           </div>
 
           <footer className="viewer-controls-enhanced">
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={handlePrev}
-              disabled={currentPageIndex === 0 || Boolean(viewerStateMessage)}
-            >
-              ← {t('lectureDetail.viewer.prev')}
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={handleNext}
-              disabled={
-                Boolean(viewerStateMessage) ||
-                currentPageIndex >= Math.max(pageTotal - 1, 0)
-              }
-            >
-              {t('lectureDetail.viewer.next')} →
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handlePrev}
+                disabled={currentPageIndex === 0 || Boolean(viewerStateMessage)}
+              >
+                ← {t('lectureDetail.viewer.prev')}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleNext}
+                disabled={
+                  Boolean(viewerStateMessage) ||
+                  currentPageIndex >= Math.max(pageTotal - 1, 0)
+                }
+              >
+                {t('lectureDetail.viewer.next')} →
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleZoomOut}
+                disabled={Boolean(viewerStateMessage) || zoom <= MIN_ZOOM}
+                title={t('lectureDetail.viewer.zoomOut')}
+              >
+                −
+              </button>
+              <span style={{ minWidth: '60px', textAlign: 'center', fontSize: '0.875rem' }}>
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleZoomIn}
+                disabled={Boolean(viewerStateMessage) || zoom >= MAX_ZOOM}
+                title={t('lectureDetail.viewer.zoomIn')}
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleZoomReset}
+                disabled={Boolean(viewerStateMessage) || zoom === 1.0}
+                title={t('lectureDetail.viewer.zoomReset')}
+              >
+                ⟲
+              </button>
+            </div>
           </footer>
         </div>
 
@@ -347,13 +474,14 @@ const LectureDetailPage = () => {
               lectureId={numericLectureId}
               slidePageNumber={currentPage?.pageNumber ?? undefined}
               keywords={currentPage?.keywords ?? []}
+              onRecordingSaved={handleRecordingSaved}
             />
           )}
         </aside>
-      </section>
+          </div>
 
-      {/* Bottom: Summary and Keywords */}
-      <section className="lecture-detail-summary-section">
+          {/* Bottom: Summary and Keywords */}
+          <div className="lecture-detail-summary-section">
         {currentPage && (
           <div className="slide-details-card">
             <header className="slide-details-header">
@@ -392,10 +520,12 @@ const LectureDetailPage = () => {
             slidePageNumber={currentPage?.pageNumber ?? undefined}
           />
         )}
-      </section>
+          </div>
 
-      {isLoading && <p>{t('common.loading')}</p>}
-      {error && <p className="form-error">{error}</p>}
+          {isLoading && <p>{t('common.loading')}</p>}
+          {error && <p className="form-error">{error}</p>}
+        </div>
+      </section>
     </>
   )
 }
