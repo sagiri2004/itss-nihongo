@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { createTranscriptionClient, type TranscriptionEventMessage } from '../../services/transcriptionService'
 import { slideRecordingService, type SlideRecordingResponse } from '../../services/slideRecordingService'
 import { useAuth } from '../../hooks/useAuth'
@@ -21,8 +21,6 @@ type LocalizedMessage = {
 
 type ErrorState = LocalizedMessage | { message: string }
 
-const CHUNK_SIZE = 3200
-const CHUNK_INTERVAL_MS = 100
 
 interface SlideTranscriptionPanelProps {
   lectureId: number
@@ -56,7 +54,7 @@ const SlideTranscriptionPanel = ({ lectureId, slidePageNumber, keywords = [], on
   const micStartSentRef = useRef(false)
   const chatFeedRef = useRef<HTMLDivElement | null>(null)
   const isRecordingRef = useRef(false)
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const timerIntervalRef = useRef<number | null>(null)
 
   // Load saved recording khi component mount hoặc slidePageNumber thay đổi
   useEffect(() => {
@@ -141,7 +139,7 @@ const SlideTranscriptionPanel = ({ lectureId, slidePageNumber, keywords = [], on
 
     setIsLoading(true)
     try {
-      const recording = await slideRecordingService.getRecording(lectureId, slidePageNumber, token)
+      const recording = await slideRecordingService.getRecording(lectureId, token, slidePageNumber)
       if (recording) {
         setSavedRecording(recording)
         // Convert API response to ChatMessage format
@@ -207,7 +205,7 @@ const SlideTranscriptionPanel = ({ lectureId, slidePageNumber, keywords = [], on
           }
           return {
             text: msg.text,
-            relative_time_sec: Math.max(0, relativeTimeSec), // Đảm bảo không âm
+            relativeTimeSec: Math.max(0, relativeTimeSec), // Đảm bảo không âm
             timestamp: msg.timestamp,
           }
         }),

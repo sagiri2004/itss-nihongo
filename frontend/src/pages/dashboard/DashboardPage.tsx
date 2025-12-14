@@ -58,16 +58,6 @@ const DashboardPage = () => {
     navigate(`/app/slides/upload?lectureId=${lectureId}`)
   }
 
-  const statusLabels = useMemo(
-    () => ({
-      UPLOADED: t('slides.statusLabels.UPLOADED'),
-      PROCESSING: t('slides.statusLabels.PROCESSING'),
-      READY: t('slides.statusLabels.READY'),
-      FAILED: t('slides.statusLabels.FAILED'),
-    }),
-    [t],
-  )
-
   const lectureStatusLabels = useMemo(
     () => ({
       INFO_INPUT: t('myLectures.status.INFO_INPUT'),

@@ -6,7 +6,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useLanguage } from '../../context/LanguageContext'
 import SlideTranscriptionPanel from '../../components/transcription/SlideTranscriptionPanel'
 import RecordingAnalysisPanel from '../../components/analysis/RecordingAnalysisPanel'
-import type { LectureDetail, SlidePage } from '../../types/lecture'
+import type { LectureDetail } from '../../types/lecture'
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist'
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { slideProcessingWebSocket } from '../../services/slideProcessingWebSocket'
@@ -92,8 +92,8 @@ const LectureWizardPage = () => {
   useEffect(() => {
     if (!isProcessing || !lectureId || !token) return
 
-    let pollingInterval: NodeJS.Timeout | null = null
-    let timeoutId: NodeJS.Timeout | null = null
+    let pollingInterval: number | null = null
+    let timeoutId: number | null = null
 
     // Poll every 5 seconds
     pollingInterval = setInterval(async () => {
@@ -141,10 +141,8 @@ const LectureWizardPage = () => {
   // Step 3: Record Audio
   const [lecture, setLecture] = useState<LectureDetail | null>(null)
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
-  const [savedRecording, setSavedRecording] = useState<any>(null)
   const [isLoadingLecture, setIsLoadingLecture] = useState(false)
   const [isPdfLoading, setIsPdfLoading] = useState(false)
-  const [totalPages, setTotalPages] = useState(0)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const pdfRef = useRef<PDFDocumentProxy | null>(null)
   const renderTaskRef = useRef<PdfRenderTask | null>(null)
@@ -194,7 +192,7 @@ const LectureWizardPage = () => {
         if (!pdfRef.current) {
           const loadingTask = getDocument(lecture.slideDeck!.signedUrl!)
           pdfRef.current = await loadingTask.promise
-          setTotalPages(pdfRef.current.numPages)
+          // Total pages available in pdfRef.current.numPages
         }
 
         const page = await pdfRef.current.getPage(currentPageIndex + 1)
@@ -514,7 +512,6 @@ const LectureWizardPage = () => {
                   lectureId={lectureId!}
                   slidePageNumber={currentPage?.pageNumber ?? undefined}
                   keywords={currentPage?.keywords ?? []}
-                  onRecordingSaved={setSavedRecording}
                 />
               </div>
             </div>
@@ -526,12 +523,11 @@ const LectureWizardPage = () => {
           {currentPage && (
             <div className="wizard-analysis-panel">
               <RecordingAnalysisPanel
-                recording={savedRecording}
+                recording={null}
                 slideContent={currentPageSummary || ''}
                 slideKeywords={currentPage.keywords || []}
                 lectureId={lectureId!}
                 slidePageNumber={currentPage.pageNumber ?? undefined}
-                onRecordingSaved={setSavedRecording}
               />
             </div>
           )}

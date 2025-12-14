@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { recordingAnalysisService, type AnalysisResponse, type RecordingAnalysisResponse } from '../../services/recordingAnalysisService'
+import { useEffect, useMemo, useState } from 'react'
+import { recordingAnalysisService, type RecordingAnalysisResponse } from '../../services/recordingAnalysisService'
 import { slideRecordingService, type SlideRecordingResponse } from '../../services/slideRecordingService'
 import { useAuth } from '../../hooks/useAuth'
 import '../../styles/analysis.css'
@@ -10,7 +10,6 @@ interface RecordingAnalysisPanelProps {
   slideKeywords?: string[]
   lectureId: number
   slidePageNumber?: number
-  onRecordingSaved?: (recording: SlideRecordingResponse) => void
 }
 
 // Ngưỡng tốc độ nói (words per minute)
@@ -21,7 +20,7 @@ const SPEECH_RATE_THRESHOLDS = {
   FAST: 180, // Trên 180 WPM là nhanh
 }
 
-const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = [], lectureId, slidePageNumber, onRecordingSaved }: RecordingAnalysisPanelProps) => {
+const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = [], lectureId, slidePageNumber }: RecordingAnalysisPanelProps) => {
   const { token } = useAuth()
   const [currentRecording, setCurrentRecording] = useState<SlideRecordingResponse | null>(recording)
   const [analysis, setAnalysis] = useState<RecordingAnalysisResponse | null>(null)
@@ -58,7 +57,7 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
 
       try {
         // 1. Load recording cho slide hiện tại
-        const recordingData = await slideRecordingService.getRecording(lectureId, slidePageNumber, token)
+        const recordingData = await slideRecordingService.getRecording(lectureId, token, slidePageNumber)
         
         if (recordingData) {
           setCurrentRecording(recordingData)
@@ -87,22 +86,6 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lectureId, slidePageNumber, token, recording])
 
-  const loadRecording = async () => {
-    if (!token) return
-
-    try {
-      const result = await slideRecordingService.getRecording(lectureId, slidePageNumber, token)
-      if (result) {
-        setCurrentRecording(result)
-        if (onRecordingSaved) {
-          onRecordingSaved(result)
-        }
-      }
-    } catch (err) {
-      // Recording not found is OK
-      setCurrentRecording(null)
-    }
-  }
 
   // Đếm từ cho tiếng Nhật (không có space)
   const countWords = (text: string, languageCode: string): number => {
@@ -184,17 +167,6 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
   }, [currentRecording])
 
 
-  const loadAnalysis = async () => {
-    if (!currentRecording?.id || !token) return
-
-    try {
-      const result = await recordingAnalysisService.getAnalysis(currentRecording.id, token)
-      setAnalysis(result)
-    } catch (err) {
-      // Analysis not found is OK
-      setAnalysis(null)
-    }
-  }
 
   const handleAnalyze = async () => {
     if (!currentRecording || !token || !slideContent) {

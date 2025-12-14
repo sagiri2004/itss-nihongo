@@ -23,7 +23,7 @@ const LectureDetailPage = () => {
   const { lectureId } = useParams<{ lectureId: string }>()
   const numericLectureId = Number(lectureId)
   const { token } = useAuth()
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
   const navigate = useNavigate()
 
   const [lecture, setLecture] = useState<LectureDetail | null>(null)
@@ -345,9 +345,8 @@ const LectureDetailPage = () => {
           {numericLectureId && (
             <SlideTranscriptionPanel
               lectureId={numericLectureId}
-              slidePageNumber={currentPage?.pageNumber}
+              slidePageNumber={currentPage?.pageNumber ?? undefined}
               keywords={currentPage?.keywords ?? []}
-              onRecordingSaved={setSavedRecording}
             />
           )}
         </aside>
@@ -390,8 +389,7 @@ const LectureDetailPage = () => {
             slideContent={currentPageSummary || ''}
             slideKeywords={currentPage?.keywords || []}
             lectureId={numericLectureId}
-            slidePageNumber={currentPage?.pageNumber}
-            onRecordingSaved={setSavedRecording}
+            slidePageNumber={currentPage?.pageNumber ?? undefined}
           />
         )}
       </section>

@@ -39,7 +39,7 @@ export const slideRecordingService = {
     })
   },
 
-  async getRecording(lectureId: number, slidePageNumber?: number, token: string): Promise<SlideRecordingResponse | null> {
+  async getRecording(lectureId: number, token: string, slidePageNumber?: number): Promise<SlideRecordingResponse | null> {
     try {
       const params = new URLSearchParams()
       params.set('lecture_id', String(lectureId))
