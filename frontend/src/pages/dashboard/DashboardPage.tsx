@@ -70,6 +70,7 @@ const DashboardPage = () => {
       INFO_INPUT: t('myLectures.status.INFO_INPUT'),
       SLIDE_UPLOAD: t('myLectures.status.SLIDE_UPLOAD'),
       RECORDING: t('myLectures.status.RECORDING'),
+      ANALYZING: t('myLectures.status.ANALYZING'),
       COMPLETED: t('myLectures.status.COMPLETED'),
     }),
     [t],
@@ -83,6 +84,8 @@ const DashboardPage = () => {
         return '📤'
       case 'RECORDING':
         return '🎙️'
+      case 'ANALYZING':
+        return '🔍'
       case 'COMPLETED':
         return '✅'
       default:
@@ -98,6 +101,8 @@ const DashboardPage = () => {
         return 'var(--color-warning)'
       case 'RECORDING':
         return 'var(--color-primary)'
+      case 'ANALYZING':
+        return 'var(--color-primary)'
       case 'COMPLETED':
         return 'var(--color-success)'
       default:
@@ -111,6 +116,7 @@ const DashboardPage = () => {
       INFO_INPUT: 0,
       SLIDE_UPLOAD: 0,
       RECORDING: 0,
+      ANALYZING: 0,
       COMPLETED: 0,
     }
 

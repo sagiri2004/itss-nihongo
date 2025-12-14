@@ -354,15 +354,13 @@ const LectureDetailPage = () => {
           {(lecture?.status === 'ANALYZING' || lecture?.status === 'COMPLETED') && (
             <button
               type="button"
-              className="btn-primary"
+              className="btn-primary final-analysis-btn"
               onClick={() => navigate(`/app/lectures/${numericLectureId}/analysis`)}
             >
-              📊 {t('lectureDetail.finalAnalysis.title')}
+              <span className="btn-icon">📊</span>
+              <span>{t('lectureDetail.finalAnalysis.title')}</span>
             </button>
           )}
-          <button type="button" className="secondary-button" onClick={navigateToUpload}>
-            {t('lectureDetail.actions.upload')}
-          </button>
         </div>
       </section>
 
