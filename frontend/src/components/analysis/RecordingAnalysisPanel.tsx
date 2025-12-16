@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { recordingAnalysisService, type RecordingAnalysisResponse } from '../../services/recordingAnalysisService'
 import { slideRecordingService, type SlideRecordingResponse } from '../../services/slideRecordingService'
 import { useAuth } from '../../hooks/useAuth'
+import { useLanguage } from '../../context/LanguageContext'
 import '../../styles/analysis.css'
 
 interface RecordingAnalysisPanelProps {
@@ -22,6 +23,7 @@ const SPEECH_RATE_THRESHOLDS = {
 
 const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = [], lectureId, slidePageNumber }: RecordingAnalysisPanelProps) => {
   const { token } = useAuth()
+  const { t } = useLanguage()
   const [currentRecording, setCurrentRecording] = useState<SlideRecordingResponse | null>(recording)
   const [analysis, setAnalysis] = useState<RecordingAnalysisResponse | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -150,13 +152,13 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
 
     // Đánh giá tốc độ
     let rateStatus: 'slow' | 'normal' | 'fast' = 'normal'
-    let rateLabel = 'Bình thường'
+    let rateLabel = t('lectureDetail.recordingAnalysis.rateNormal')
     if (averageWPM < SPEECH_RATE_THRESHOLDS.SLOW) {
       rateStatus = 'slow'
-      rateLabel = 'Chậm'
+      rateLabel = t('lectureDetail.recordingAnalysis.rateSlow')
     } else if (averageWPM > SPEECH_RATE_THRESHOLDS.FAST) {
       rateStatus = 'fast'
-      rateLabel = 'Nhanh'
+      rateLabel = t('lectureDetail.recordingAnalysis.rateFast')
     }
 
     return {
@@ -167,13 +169,13 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
       rateLabel,
       timeWindows,
     }
-  }, [currentRecording])
+  }, [currentRecording, t])
 
 
 
   const handleAnalyze = async () => {
     if (!currentRecording || !token || !slideContent) {
-      setError('Thiếu thông tin để phân tích. Vui lòng ghi âm và lưu trước.')
+      setError(t('lectureDetail.recordingAnalysis.missingInfo'))
       return
     }
 
@@ -212,7 +214,7 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
       setAnalysis(savedAnalysis)
     } catch (err: any) {
       console.error('Analysis failed', err)
-      setError(err?.message || 'Phân tích thất bại')
+      setError(err?.message || t('lectureDetail.recordingAnalysis.error'))
     } finally {
       setIsAnalyzing(false)
     }
@@ -222,7 +224,7 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
     return (
       <div className="recording-analysis-panel">
         <p style={{ color: '#64748b', textAlign: 'center', padding: '2rem' }}>
-          Chưa có recording. Vui lòng ghi âm và lưu để phân tích.
+          {t('lectureDetail.recordingAnalysis.noRecording')}
         </p>
       </div>
     )
@@ -231,7 +233,7 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
   return (
     <div className="recording-analysis-panel">
       <header className="analysis-header">
-        <h3>📊 Phân tích thuyết trình</h3>
+        <h3>📊 {t('lectureDetail.recordingAnalysis.title')}</h3>
         {!analysis && (
           <button
             type="button"
@@ -239,7 +241,9 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
             onClick={handleAnalyze}
             disabled={isAnalyzing || !slideContent}
           >
-            {isAnalyzing ? '⏳ Đang phân tích...' : '🔍 Phân tích'}
+            {isAnalyzing
+              ? `⏳ ${t('lectureDetail.recordingAnalysis.analyzing')}`
+              : `🔍 ${t('lectureDetail.recordingAnalysis.analyze')}`}
           </button>
         )}
       </header>
@@ -249,10 +253,10 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
       {/* Tốc độ nói */}
       {speechRateData && (
         <div className="speech-rate-section">
-          <h4>🎤 Tốc độ nói</h4>
+          <h4>🎤 {t('lectureDetail.recordingAnalysis.speechRateTitle')}</h4>
           <div className="speech-rate-stats">
             <div className="stat-item">
-              <span className="stat-label">Trung bình:</span>
+              <span className="stat-label">{t('lectureDetail.recordingAnalysis.avgLabel')}:</span>
               <span className={`stat-value ${speechRateData.rateStatus}`}>
                 {speechRateData.averageWPM} WPM
               </span>
@@ -261,153 +265,33 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
               </span>
             </div>
             <div className="stat-item">
-              <span className="stat-label">Tổng từ:</span>
-              <span className="stat-value">{speechRateData.totalWords} từ</span>
+              <span className="stat-label">{t('lectureDetail.recordingAnalysis.totalWordsLabel')}:</span>
+              <span className="stat-value">
+                {speechRateData.totalWords} {t('lectureDetail.recordingAnalysis.wordsUnit')}
+              </span>
             </div>
             <div className="stat-item">
-              <span className="stat-label">Thời gian:</span>
+              <span className="stat-label">{t('lectureDetail.recordingAnalysis.timeLabel')}:</span>
               <span className="stat-value">
-                {Math.floor(speechRateData.durationMinutes)} phút{' '}
-                {Math.round((speechRateData.durationMinutes % 1) * 60)} giây
+                {Math.floor(speechRateData.durationMinutes)} {t('lectureDetail.recordingAnalysis.minutesUnit')}{' '}
+                {Math.round((speechRateData.durationMinutes % 1) * 60)}{' '}
+                {t('lectureDetail.recordingAnalysis.secondsUnit')}
               </span>
             </div>
           </div>
-
-          {/* Biểu đồ tốc độ nói */}
-          {speechRateData.timeWindows.length > 0 && (
-            <div className="speech-rate-chart">
-              <h5>Biểu đồ tốc độ nói theo thời gian</h5>
-              <div className="chart-container">
-                <div className="chart-wrapper">
-                  <svg className="chart-svg" viewBox="0 0 800 200" preserveAspectRatio="xMidYMid meet">
-                    {/* Y-axis labels */}
-                    {[0, 50, 100, 150, 200, 250].map((y) => (
-                      <g key={y}>
-                        <line
-                          x1="40"
-                          y1={200 - (y / 250) * 180}
-                          x2="760"
-                          y2={200 - (y / 250) * 180}
-                          stroke="#e5e7eb"
-                          strokeWidth="1"
-                        />
-                        <text
-                          x="35"
-                          y={200 - (y / 250) * 180 + 4}
-                          fontSize="10"
-                          fill="#64748b"
-                          textAnchor="end"
-                        >
-                          {y}
-                        </text>
-                      </g>
-                    ))}
-
-                    {/* Threshold lines */}
-                    <line
-                      x1="40"
-                      y1={200 - (SPEECH_RATE_THRESHOLDS.SLOW / 250) * 180}
-                      x2="760"
-                      y2={200 - (SPEECH_RATE_THRESHOLDS.SLOW / 250) * 180}
-                      stroke="#f59e0b"
-                      strokeWidth="2"
-                      strokeDasharray="5,5"
-                    />
-                    <line
-                      x1="40"
-                      y1={200 - (SPEECH_RATE_THRESHOLDS.FAST / 250) * 180}
-                      x2="760"
-                      y2={200 - (SPEECH_RATE_THRESHOLDS.FAST / 250) * 180}
-                      stroke="#ef4444"
-                      strokeWidth="2"
-                      strokeDasharray="5,5"
-                    />
-
-                    {/* X-axis */}
-                    <line
-                      x1="40"
-                      y1="180"
-                      x2="760"
-                      y2="180"
-                      stroke="#374151"
-                      strokeWidth="2"
-                    />
-
-                    {/* Data line and points */}
-                    {speechRateData.timeWindows.length > 0 && (() => {
-                      const maxWPM = Math.max(...speechRateData.timeWindows.map(w => w.wpm), 250)
-                      const stepX = 720 / Math.max(speechRateData.timeWindows.length - 1, 1)
-                      const points = speechRateData.timeWindows
-                        .map((w, i) => {
-                          const x = 40 + i * stepX
-                          const y = 180 - Math.min((w.wpm / maxWPM) * 160, 160)
-                          return `${x},${y}`
-                        })
-                        .join(' ')
-
-                      return (
-                        <>
-                          <polyline
-                            points={points}
-                            fill="none"
-                            stroke="#3b82f6"
-                            strokeWidth="2"
-                          />
-                          {speechRateData.timeWindows.map((w, i) => {
-                            const x = 40 + i * stepX
-                            const y = 180 - Math.min((w.wpm / maxWPM) * 160, 160)
-                            return (
-                              <g key={i}>
-                                <circle
-                                  cx={x}
-                                  cy={y}
-                                  r="4"
-                                  fill="#3b82f6"
-                                />
-                                {/* Time labels */}
-                                {i % 2 === 0 && (
-                                  <text
-                                    x={x}
-                                    y="195"
-                                    fontSize="9"
-                                    fill="#64748b"
-                                    textAnchor="middle"
-                                  >
-                                    {Math.floor(w.time / 60)}:{(w.time % 60).toString().padStart(2, '0')}
-                                  </text>
-                                )}
-                              </g>
-                            )
-                          })}
-                        </>
-                      )
-                    })()}
-                  </svg>
-                </div>
-                <div className="chart-legend">
-                  <span className="legend-item">
-                    <span className="legend-color" style={{ backgroundColor: '#f59e0b' }}></span>
-                    Ngưỡng chậm ({SPEECH_RATE_THRESHOLDS.SLOW} WPM)
-                  </span>
-                  <span className="legend-item">
-                    <span className="legend-color" style={{ backgroundColor: '#ef4444' }}></span>
-                    Ngưỡng nhanh ({SPEECH_RATE_THRESHOLDS.FAST} WPM)
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
       {/* Kết quả phân tích từ Gemini */}
       {analysis && (
         <div className="analysis-results">
-          <h4>📝 Đánh giá nội dung</h4>
+          <h4>📝 {t('lectureDetail.recordingAnalysis.evaluationTitle')}</h4>
 
           <div className="analysis-scores">
             <div className="score-item">
-              <span className="score-label">Độ chính xác ngữ cảnh</span>
+              <span className="score-label">
+                {t('lectureDetail.recordingAnalysis.contextAccuracy')}
+              </span>
               <div className="score-bar">
                 <div
                   className="score-fill"
@@ -420,7 +304,9 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
             </div>
 
             <div className="score-item">
-              <span className="score-label">Độ đầy đủ nội dung</span>
+              <span className="score-label">
+                {t('lectureDetail.recordingAnalysis.contentCompleteness')}
+              </span>
               <div className="score-bar">
                 <div
                   className="score-fill"
@@ -433,7 +319,9 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
             </div>
 
             <div className="score-item">
-              <span className="score-label">Độ liên quan ngữ cảnh</span>
+              <span className="score-label">
+                {t('lectureDetail.recordingAnalysis.contextRelevance')}
+              </span>
               <div className="score-bar">
                 <div
                   className="score-fill"
@@ -448,14 +336,14 @@ const RecordingAnalysisPanel = ({ recording, slideContent = '', slideKeywords = 
 
           {analysis.feedback && (
             <div className="analysis-feedback">
-              <h5>Nhận xét</h5>
+              <h5>{t('lectureDetail.recordingAnalysis.feedbackTitle')}</h5>
               <p>{analysis.feedback}</p>
             </div>
           )}
 
           {analysis.suggestions && analysis.suggestions.length > 0 && (
             <div className="analysis-suggestions">
-              <h5>Gợi ý cải thiện</h5>
+              <h5>{t('lectureDetail.recordingAnalysis.suggestionsTitle')}</h5>
               <ul>
                 {analysis.suggestions.map((suggestion, index) => (
                   <li key={index}>{suggestion}</li>
