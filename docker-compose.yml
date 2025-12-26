@@ -1,0 +1,134 @@
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: itss-nihongo-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: backend
+      MYSQL_USER: backend_user
+      MYSQL_PASSWORD: backend_pass
+      TZ: UTC
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/src/main/resources/migration:/docker-entrypoint-initdb.d
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - itss-nihongo-network
+
+  # Backend Service (Spring Boot)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: itss-nihongo-backend
+    env_file:
+      - .env
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/backend?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-speech-processing-prod}
+      GCP_SERVICE_ACCOUNT_KEY: ${GCP_SERVICE_ACCOUNT_KEY:-classpath:speech-processing-prod-9ffbefa55e2c.json}
+      GCS_BUCKET_NAME: ${GCS_BUCKET_NAME:-speech-processing-intermediate}
+      GCS_REGION: ${GCS_REGION:-asia-southeast1}
+      SLIDE_SERVICE_BASE_URL: http://speech-to-text:8010
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-smtp.gmail.com}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-587}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./speech-to-text/speech-processing-prod-9ffbefa55e2c.json:/app/speech-processing-prod-9ffbefa55e2c.json:ro
+    healthcheck:
+      # Check if server responds - accept any HTTP response (including 401) as healthy
+      # If server returns any HTTP status code, it means it's running
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/actuator/health | grep -qE '^[0-9]+$'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - itss-nihongo-network
+
+  # Speech-to-Text Service (FastAPI)
+  speech-to-text:
+    build:
+      context: ./speech-to-text
+      dockerfile: Dockerfile
+    container_name: itss-nihongo-speech-to-text
+    env_file:
+      - .env
+      - ./speech-to-text/.env
+    environment:
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-speech-processing-prod}
+      GCP_SERVICE_ACCOUNT_KEY: /app/credentials/speech-processing-prod-9ffbefa55e2c.json
+      GCS_BUCKET_NAME: ${GCS_BUCKET_NAME:-speech-processing-intermediate}
+      GCS_REGION: ${GCS_REGION:-asia-southeast1}
+      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/speech-processing-prod-9ffbefa55e2c.json
+      # Gemini API Key và các env variables khác sẽ được load tự động từ .env
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      USE_LLM_SUMMARIZER: ${USE_LLM_SUMMARIZER:-false}
+      LLM_SUMMARIZER_PROVIDER: ${LLM_SUMMARIZER_PROVIDER:-none}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "8010:8010"
+    volumes:
+      - ./speech-to-text/speech-processing-prod-9ffbefa55e2c.json:/app/credentials/speech-processing-prod-9ffbefa55e2c.json:ro
+      - ./speech-to-text/audio:/app/audio:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8010/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - itss-nihongo-network
+
+  # Frontend Service (React/Vite)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8080}
+        - VITE_SPEECH_WS_URL=${VITE_SPEECH_WS_URL:-ws://localhost:8010/ws}
+    container_name: itss-nihongo-frontend
+    env_file:
+      - .env
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+      speech-to-text:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - itss-nihongo-network
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  itss-nihongo-network:
+    driver: bridge
+

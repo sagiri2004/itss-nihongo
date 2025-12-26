@@ -1,54 +1,53 @@
 # Core API Clients
-assemblyai>=0.32.0
-python-dotenv
-boto3
+python-dotenv>=1.0.0
+# Removed: assemblyai (not used)
+# Removed: boto3 (using Google Cloud instead)
 
 # Core Google Cloud
 google-cloud-speech>=2.20.0
 google-cloud-storage>=2.10.0
-google-cloud-translate>=3.11.0
+# Removed: google-cloud-translate (not used)
 
 # PDF Processing
 PyMuPDF>=1.23.0
-pdfplumber==0.10.0
+# Removed: pdfplumber (not used, only using PyMuPDF)
 
-# Japanese NLP
-mecab-python3>=1.0.6
-unidic-lite>=1.0.8
-spacy>=3.7.0
-ginza>=5.1.0
-ja-ginza-electra>=5.1.0
+# Japanese NLP (Optional - only needed for extractive summarization fallback)
+# Removed: mecab-python3, unidic-lite (japanese_nlp.py removed)
+# Removed: ginza, ja-ginza-electra (now optional, only load if LLM unavailable)
+# spacy>=3.7.0  # Keep if needed by other modules, otherwise can be removed
 
 # OCR (Phase 2 Week 3)
 pytesseract>=0.3.10
 Pillow>=10.0.0
 
-# Audio Processing
-soundfile>=0.12.1
-librosa>=0.10.0
-scipy>=1.11.0
+# Audio Processing (REMOVED - not used in FastAPI routers)
+# Removed: soundfile (only used in processing/audio_converter.py which is not used)
+# Removed: librosa (only used in processing/audio_converter.py which is not used)
+# Removed: scipy (not used directly)
 
-# Semantic Embeddings
-sentence-transformers>=2.2.2
-faiss-cpu>=1.7.4
+# Semantic Embeddings (REMOVED - using Gemini API instead)
+# Removed: sentence-transformers>=2.2.2
+# Removed: huggingface_hub<0.20.0
+# Removed: faiss-cpu>=1.7.4
 
 # Text Matching
 python-Levenshtein>=0.21.0
 rapidfuzz>=3.0.0
 
 # CLI and Utilities
-click>=8.1.0
-tqdm>=4.65.0
-python-dotenv>=1.0.0
+# Removed: click (not used)
+# Removed: tqdm (not used)
+# python-dotenv is already listed above
 
-# Database
-sqlalchemy>=2.0.0
+# Database (REMOVED - using JSON-based storage)
+# Removed: sqlalchemy (database.py not used in routers)
 
-# Streamlit UI
-streamlit>=1.28.0
-streamlit-webrtc>=0.47.0
-av>=10.0.0
-pydub>=0.25.1
+# Streamlit UI (REMOVED - not used in FastAPI production)
+# Removed: streamlit (only used in app.py, separate from FastAPI)
+# Removed: streamlit-webrtc (dependency of streamlit)
+# Removed: av (dependency of streamlit-webrtc)
+# Removed: pydub (not used)
 
 # API
 fastapi>=0.110.0
@@ -57,10 +56,10 @@ python-multipart>=0.0.6
 
 # Data Processing
 numpy>=2.0.0  # Python 3.13 compatible (2.x series)
-pandas>=2.0.0.0
+# Removed: pandas (not used)
 
 # LLM APIs (Optional - for advanced summarization)
 # Uncomment the ones you want to use:
 # openai>=1.0.0  # For OpenAI GPT-4/GPT-3.5
 # anthropic>=0.18.0  # For Anthropic Claude
-# google-generativeai>=0.3.0  # For Google Gemini
+google-generativeai>=0.3.0  # For Google Gemini (required for PDF processing)

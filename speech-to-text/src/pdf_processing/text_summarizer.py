@@ -147,38 +147,44 @@ class TextSummarizer:
                 else:
                     logger.warning(f"Failed to initialize LLM summarizer: {e}, using extractive method")
         
-        try:
-            import ja_ginza_electra
-            self.nlp = __import__('spacy').load("ja_ginza_electra")
-            logger.info("Loaded NLP model: ja_ginza_electra")
-        except ImportError:
+        # Only load NLP models if LLM is not available (for fallback)
+        # Since we're using Gemini API, NLP models are optional
+        self.nlp = None
+        if not use_llm or (use_llm and not self.llm_summarizer):
+            # Only load ginza if we need extractive fallback
             try:
-                import spacy
-                self.nlp = spacy.load("ja_ginza")
-                logger.info("Loaded NLP model: ja_ginza (Standard)")
+                import ja_ginza_electra
+                self.nlp = __import__('spacy').load("ja_ginza_electra")
+                logger.info("Loaded NLP model: ja_ginza_electra (fallback mode)")
+            except ImportError:
+                try:
+                    import spacy
+                    self.nlp = spacy.load("ja_ginza")
+                    logger.info("Loaded NLP model: ja_ginza (Standard, fallback mode)")
+                except Exception as e:
+                    if use_llm is True:
+                        # If LLM is forced and available, we can skip NLP
+                        logger.warning(f"GiNZA NLP model not available, but LLM is enabled. Error: {e}")
+                    else:
+                        error_msg = (
+                            f"GiNZA NLP model is required for extractive summarization. "
+                            f"Please install 'ginza' and 'ja-ginza' packages: "
+                            f"pip install ginza ja-ginza. Error: {e}"
+                        )
+                        logger.error(error_msg)
+                        raise RuntimeError(error_msg) from e
             except Exception as e:
-                error_msg = (
-                    f"GiNZA NLP model is required but not found. "
-                    f"Please install 'ginza' and 'ja-ginza' packages: "
-                    f"pip install ginza ja-ginza. Error: {e}"
-                )
-                logger.error(error_msg)
-                raise RuntimeError(error_msg) from e
-        except Exception as e:
-            error_msg = (
-                f"Failed to load NLP model. "
-                f"Please ensure 'ginza' and 'ja-ginza' are properly installed. Error: {e}"
-            )
-            logger.error(error_msg)
-            raise RuntimeError(error_msg) from e
-        
-        if self.nlp is None:
-            error_msg = (
-                "NLP model failed to initialize. "
-                "Please install 'ginza' and 'ja-ginza' packages: pip install ginza ja-ginza"
-            )
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
+                if use_llm is True:
+                    logger.warning(f"Failed to load NLP model, but LLM is enabled. Error: {e}")
+                else:
+                    error_msg = (
+                        f"Failed to load NLP model. "
+                        f"Please ensure 'ginza' and 'ja-ginza' are properly installed. Error: {e}"
+                    )
+                    logger.error(error_msg)
+                    raise RuntimeError(error_msg) from e
+        else:
+            logger.info("Skipping NLP model loading (using LLM mode)")
 
     def reconstruct_text(self, text: str) -> str:
         """

@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -124,6 +124,18 @@ def create_app() -> FastAPI:
     app.include_router(speech_proxy.router, prefix="/proxy", tags=["speech-proxy"])
     app.include_router(analysis.router, prefix="/analysis", tags=["analysis"])
     app.include_router(final_analysis.router, prefix="/final-analysis", tags=["final-analysis"])
+    
+    # Add a catch-all WebSocket endpoint at /ws to handle direct connections
+    # This will redirect to /ws/transcribe or return helpful error
+    @app.websocket("/ws")
+    async def websocket_root(websocket: WebSocket):
+        """Catch-all WebSocket endpoint at /ws - redirects to /ws/transcribe."""
+        await websocket.accept()
+        await websocket.send_json({
+            "event": "error",
+            "message": "Please use /ws/transcribe or /proxy/speech-stream endpoint"
+        })
+        await websocket.close(code=1008, reason="Use /ws/transcribe or /proxy/speech-stream")
 
     static_dir = BASE_DIR / "static"
     if static_dir.exists():
@@ -132,6 +144,15 @@ def create_app() -> FastAPI:
     @app.get("/", include_in_schema=False)
     async def root() -> RedirectResponse:
         return RedirectResponse(url="/static/demo.html")
+
+    @app.get("/health", tags=["health"])
+    async def health_check():
+        """Health check endpoint for Docker and monitoring."""
+        return {
+            "status": "healthy",
+            "service": "speech-to-text",
+            "version": "1.0.0"
+        }
 
     return app
 

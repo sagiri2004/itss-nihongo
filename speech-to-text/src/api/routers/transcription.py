@@ -66,7 +66,12 @@ def _resolve_project_id(credentials_path: Optional[str]) -> Optional[str]:
 @router.websocket("/transcribe")
 async def websocket_transcribe(websocket: WebSocket) -> None:
     """Establish a WebSocket session for audio streaming and transcription."""
+    # Accept WebSocket connection - CORS is handled by middleware
+    # Log origin for debugging
+    origin = websocket.headers.get("origin")
+    logger.info(f"WebSocket connection attempt from origin: {origin}")
     await websocket.accept()
+    logger.info("WebSocket connection accepted")
 
     credentials_path = _ensure_credentials_path()
     project_id = _resolve_project_id(credentials_path)

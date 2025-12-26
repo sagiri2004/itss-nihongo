@@ -34,12 +34,12 @@ public class SlideRecordingController {
     }
 
     @GetMapping
-    public ResponseEntity<SlideRecordingResponse> getRecording(
+    public ResponseEntity<?> getRecording(
             @RequestParam("lecture_id") Long lectureId,
             @RequestParam(value = "slide_page_number", required = false) Integer slidePageNumber) {
         return recordingService.getRecording(lectureId, slidePageNumber)
                 .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.noContent().build()); // Return 204 No Content instead of 404
+                .orElse(ResponseEntity.ok().build()); // Return 200 OK with empty body (frontend will handle as null)
     }
 }
 

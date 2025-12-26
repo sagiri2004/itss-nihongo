@@ -21,14 +21,17 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // Register the /ws endpoint, enabling SockJS fallback options
-        // Allow specific origins for development (must match CORS config in SecurityConfig)
+        // Allow specific origins for development and Docker (must match CORS config in SecurityConfig)
         registry.addEndpoint("/ws")
                 .setAllowedOrigins(
                         "http://localhost:5173",
                         "http://localhost:3000",
                         "http://127.0.0.1:5173",
-                        "http://127.0.0.1:3000"
+                        "http://127.0.0.1:3000",
+                        "http://itss-nihongo-frontend:80",
+                        "http://itss-nihongo-frontend"
                 )
+                .setAllowedOriginPatterns("*")  // Allow all origins in Docker (for development)
                 .withSockJS();
     }
 }

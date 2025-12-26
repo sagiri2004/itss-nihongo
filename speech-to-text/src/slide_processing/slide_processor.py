@@ -7,21 +7,59 @@ high-level interface for file and streaming pipelines.
 
 import logging
 import json
+import re
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 import tempfile
 
 from ..pdf_processing.pdf_extractor import PDFExtractor, SlideContent
-from ..pdf_processing.japanese_nlp import JapaneseNLP
 from ..pdf_processing.keyword_indexer import KeywordIndexer
-from ..pdf_processing.embedding_generator import EmbeddingGenerator
 from ..pdf_processing.text_summarizer import TextSummarizer
 from ..matching.exact_matcher import ExactMatcher
 from ..matching.fuzzy_matcher import FuzzyMatcher
-from ..matching.semantic_matcher import SemanticMatcher
 from ..matching.score_combiner import ScoreCombiner, MatchResult
 
 logger = logging.getLogger(__name__)
+
+
+def _simple_extract_keywords(text: str, min_length: int = 2) -> List[str]:
+    """
+    Simple keyword extraction without NLP models.
+    Extracts words from text (Japanese and English).
+    
+    Args:
+        text: Input text
+        min_length: Minimum keyword length
+        
+    Returns:
+        List of keywords
+    """
+    if not text:
+        return []
+    
+    # Remove punctuation and split by whitespace
+    # Keep Japanese characters, alphanumeric, and common separators
+    words = re.findall(r'[\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]+', text)
+    
+    # Filter by length and convert to lowercase for English words
+    keywords = []
+    for word in words:
+        if len(word) >= min_length:
+            # Keep Japanese as-is, lowercase English
+            if re.match(r'^[a-zA-Z]+$', word):
+                keywords.append(word.lower())
+            else:
+                keywords.append(word)
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_keywords = []
+    for kw in keywords:
+        if kw not in seen:
+            seen.add(kw)
+            unique_keywords.append(kw)
+    
+    return unique_keywords
 
 
 class SlideProcessingError(Exception):
@@ -80,16 +118,10 @@ class SlideProcessor:
             export_format: Export format - "json" or "text" (default: "json")
         """
         self.pdf_extractor = PDFExtractor()  # Initialize PDF extractor
-        self.nlp = JapaneseNLP()
         self.keyword_indexer = KeywordIndexer()
-        self.use_embeddings = use_embeddings
+        self.use_embeddings = False  # Disabled - local models removed, use Gemini API instead
         self.export_extracted_content = export_extracted_content
         self.export_format = export_format
-        
-        if use_embeddings:
-            self.embedding_gen = EmbeddingGenerator()
-        else:
-            self.embedding_gen = None
         
         # Matching parameters
         self.exact_weight = exact_weight
@@ -103,7 +135,6 @@ class SlideProcessor:
         # Will be initialized after processing PDF
         self.exact_matcher = None
         self.fuzzy_matcher = None
-        self.semantic_matcher = None
         self.score_combiner = None
         
         # Slide data
@@ -306,8 +337,8 @@ class SlideProcessor:
                 # Check if text is from OCR (OCR blocks have font_name="OCR")
                 is_ocr_text = any(block.font_name == "OCR" for block in slide.text_blocks)
                 
-                # Extract keywords (with OCR-aware processing) - per page
-                keywords = self.nlp.extract_keywords(text, is_ocr_text=is_ocr_text)
+                # Extract keywords using simple text processing (NLP models removed)
+                keywords = _simple_extract_keywords(text, min_length=2)
                 self.slide_keywords[slide.page_number] = keywords  # Fixed: page -> page_number
                 slide_keywords_list.append(keywords)
                 slide_ids.append(slide.page_number)  # Fixed: page -> page_number
@@ -402,31 +433,14 @@ class SlideProcessor:
                 similarity_threshold=0.8
             )
             
-            # Generate embeddings if enabled
+            # Embeddings and semantic matching disabled (local models removed)
             has_embeddings = False
-            if self.use_embeddings and self.embedding_gen:
-                try:
-                    embeddings, index = self.embedding_gen.generate_embeddings(
-                        self.slide_texts,
-                        slide_ids
-                    )
-                    
-                    # SemanticMatcher expects the EmbeddingGenerator instance, not raw embeddings
-                    self.semantic_matcher = SemanticMatcher(
-                        self.embedding_gen,
-                        min_similarity=0.7
-                    )
-                    has_embeddings = True
-                    logger.info("Generated semantic embeddings")
-                except Exception as e:
-                    logger.warning(f"Failed to generate embeddings: {e}")
-                    self.semantic_matcher = None
             
-            # Initialize score combiner
+            # Initialize score combiner (semantic_weight set to 0 since semantic matching is disabled)
             self.score_combiner = ScoreCombiner(
                 exact_weight=self.exact_weight,
                 fuzzy_weight=self.fuzzy_weight,
-                semantic_weight=self.semantic_weight,
+                semantic_weight=0.0,  # Disabled - local models removed
                 title_boost=self.title_boost,
                 temporal_boost=self.temporal_boost,
                 min_score_threshold=self.min_score_threshold,
@@ -470,17 +484,15 @@ class SlideProcessor:
             raise MatchingError("Slide processor not initialized. Call process_pdf() first.")
         
         try:
-            # Extract keywords from transcript (not OCR, so is_ocr_text=False)
-            keywords = self.nlp.extract_keywords(text, is_ocr_text=False)
-            readings = [self.nlp.get_reading(text)]
+            # Extract keywords from transcript using simple text processing
+            keywords = _simple_extract_keywords(text, min_length=2)
+            readings = []  # Readings not available without NLP models
             
-            # Run three-pass matching
+            # Run two-pass matching (semantic matching removed)
             exact_results = self.exact_matcher.match(keywords)
             fuzzy_results = self.fuzzy_matcher.match(keywords, readings)
             
-            semantic_results = {}
-            if self.semantic_matcher:
-                semantic_results = self.semantic_matcher.match(text, top_k=5)
+            semantic_results = {}  # Semantic matching disabled (local models removed)
             
             # Combine scores
             metadata = {}
@@ -672,7 +684,7 @@ class SlideProcessor:
             "processing_statistics": {
                 "slide_count": len(self.slides),
                 "keywords_count": len(self.inverted_index),
-                "has_embeddings": self.use_embeddings and self.embedding_gen is not None,
+                "has_embeddings": False,  # Disabled - local models removed
                 "total_keywords": sum(len(kw) for kw in self.slide_keywords.values()),
                 "unique_keywords": len(self.inverted_index)
             },
@@ -728,13 +740,7 @@ class SlideProcessor:
         }
         
         # Add embeddings info if available
-        if self.use_embeddings and self.embedding_gen:
-            output_data["embeddings_info"] = {
-                "model_name": self.embedding_gen.model_name,
-                "embedding_dimension": self.embedding_gen.embedding_dim,
-                "has_faiss_index": self.embedding_gen.faiss_index is not None,
-                "total_embeddings": len(self.slide_texts)
-            }
+        # Embeddings info removed (local models disabled)
         
         # Generate global summary (all_summary) using TextSummarizer
         summarizer = TextSummarizer()
@@ -766,7 +772,7 @@ class SlideProcessor:
             f.write(f"Total Slides: {len(self.slides)}\n")
             f.write(f"Unique Keywords: {len(self.inverted_index)}\n")
             f.write(f"Total Keywords (all slides): {sum(len(kw) for kw in self.slide_keywords.values())}\n")
-            f.write(f"Has Embeddings: {self.use_embeddings and self.embedding_gen is not None}\n")
+            f.write(f"Has Embeddings: False (local models disabled)\n")
             f.write("\n")
             
             # Processing config
@@ -782,15 +788,7 @@ class SlideProcessor:
             f.write(f"Switch Multiplier: {self.switch_multiplier}\n")
             f.write("\n")
             
-            # Embeddings info
-            if self.use_embeddings and self.embedding_gen:
-                f.write("EMBEDDINGS INFORMATION\n")
-                f.write("-" * 80 + "\n")
-                f.write(f"Model: {self.embedding_gen.model_name}\n")
-                f.write(f"Dimension: {self.embedding_gen.embedding_dim}\n")
-                f.write(f"FAISS Index: {self.embedding_gen.faiss_index is not None}\n")
-                f.write(f"Total Embeddings: {len(self.slide_texts)}\n")
-                f.write("\n")
+            # Embeddings info removed (local models disabled)
             
             # Top keywords
             f.write("TOP KEYWORDS (by frequency)\n")

@@ -6,21 +6,16 @@ for matching with speech transcripts.
 
 Components:
 - PDFExtractor: Extract text and structure from PDF files
-- JapaneseNLP: Japanese text processing and normalization
 - KeywordIndexer: TF-IDF based keyword extraction and indexing
-- EmbeddingGenerator: Semantic embeddings for slides
+- TextSummarizer: Text summarization (LLM-based)
 """
 
 from .pdf_extractor import PDFExtractor
-from .japanese_nlp import JapaneseNLP
 from .keyword_indexer import KeywordIndexer
-from .embedding_generator import EmbeddingGenerator
 from .text_summarizer import TextSummarizer
 
 __all__ = [
     'PDFExtractor',
-    'JapaneseNLP',
     'KeywordIndexer',
-    'EmbeddingGenerator',
     'TextSummarizer',
 ]
